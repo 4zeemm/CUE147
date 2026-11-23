@@ -156,12 +156,12 @@ public class BackendTest {
         check("Staff does not have permission to manage (delete) expenses", !staff.canManageExpenses());
         check("Owner has permission to delete expenses", owner.canManageExpenses());
         check("Without pressing Yes (Cancel) nothing is deleted", expenseDAO.findAll().size() == 2);
-        check("Deleting an expense by its id returns true", expenseDAO.delete(electricity.getId()));
+        check("Deleting an expense by its id returns true", expenseDAO.delete(electricity.getId(), owner.getId()));
         List<Expense> afterDelete = expenseDAO.findAll();
-        check("The record is really gone from MySQL", afterDelete.size() == 1 && afterDelete.stream().noneMatch(x -> x.getId() == electricity.getId()));
+        check("The expense leaves the list (kept in MySQL as DELETED)", afterDelete.size() == 1 && afterDelete.stream().noneMatch(x -> x.getId() == electricity.getId()));
         check("The other expense (rent) was NOT deleted", afterDelete.get(0).getId() == rent.getId());
-        check("Deleting the same id again returns false (no error)", !expenseDAO.delete(electricity.getId()));
-        check("Deleting an unknown id deletes nothing", !expenseDAO.delete(999999) && expenseDAO.findAll().size() == 1);
+        check("Deleting the same id again returns false (no error)", !expenseDAO.delete(electricity.getId(), owner.getId()));
+        check("Deleting an unknown id deletes nothing", !expenseDAO.delete(999999, owner.getId()) && expenseDAO.findAll().size() == 1);
         check("Expense total after delete = rent only (today's electricity removed)",
                 same(LocalDate.now().getDayOfMonth() == 1 ? "5000" : "0", expenseDAO.totalBetween(LocalDate.now(), LocalDate.now())));
         DashboardStats afterStats = new ReportService().loadDashboardStats();
@@ -411,19 +411,19 @@ public class BackendTest {
         Expense electricityNow = expenseDAO.findAll().stream().filter(x -> x.getCategory().equals("ELECTRICITY")).findFirst().get();
         BigDecimal monthBefore = reports2.loadDashboardStats().monthExpenses;
         Expense fixed = new Expense(electricityNow.getId(), "MAINTENANCE", new BigDecimal("999.00"), today, "Fixed the lights", "CASH");
-        check("An expense can be edited", expenseDAO.update(fixed));
+        check("An expense can be edited", expenseDAO.update(fixed, owner.getId()));
         Expense reloaded = expenseDAO.findAll().stream().filter(x -> x.getId() == electricityNow.getId()).findFirst().get();
         check("The edited values are saved (category, amount, method, description)",
                 reloaded.getCategory().equals("MAINTENANCE") && same("999.00", reloaded.getAmount()) && reloaded.getPaymentMethod().equals("CASH")
                         && reloaded.getDescription().equals("Fixed the lights"));
         check("Dashboard monthly expenses follow the edit (-1200.50 + 999.00)",
                 monthBefore.subtract(new BigDecimal("1200.50")).add(new BigDecimal("999.00")).compareTo(reports2.loadDashboardStats().monthExpenses) == 0);
-        check("Editing an unknown expense changes nothing", !expenseDAO.update(new Expense(999999, "RENT", BigDecimal.ONE, today, "x", "CASH")));
+        check("Editing an unknown expense changes nothing", !expenseDAO.update(new Expense(999999, "RENT", BigDecimal.ONE, today, "x", "CASH"), owner.getId()));
         check("No active game is left behind by the tests", new SessionDAO().countActive() == 0);
 
         // ---------- checkout: discounts, split payments, Billed by ----------
         check("The test database is at the newest version", database.SchemaMigrator.migrate() == database.SchemaMigrator.latestVersion()
-                && database.SchemaMigrator.latestVersion() == 3);
+                && database.SchemaMigrator.latestVersion() == 4);
         StaffMemberDAO staffDAO = new StaffMemberDAO();
         check("The Billed-by list starts with the names of the login accounts",
                 staffDAO.findActive().stream().anyMatch(m -> m.getName().equals("Club Owner")) && staffDAO.findActive().stream().anyMatch(m -> m.getName().equals("Counter Staff")));
@@ -467,6 +467,7 @@ public class BackendTest {
         Bill unpaidLater = billDAO.findById(later.getId());
         check("Pay Later keeps the bill UNPAID with its discount and Billed by", !unpaidLater.isPaid() && same("100", unpaidLater.getFinalAmount())
                 && same("20", unpaidLater.getBillDiscountAmount()) && unpaidLater.getBilledBy().equals("Ken"));
+        check("A bill without an occasion still knows who billed it (by id)", Integer.valueOf(kenId).equals(unpaidLater.getBilledByStaffId()));
         Checkout co3 = billService.startCheckout(unpaidLater);
         check("Opening the checkout again brings back the saved discount", co3.getDiscountType() == Checkout.DiscountType.FLAT && same("100", co3.getFinalTotal()));
         billService.recordPayment(unpaidLater, "CASH", staff);
@@ -557,6 +558,76 @@ public class BackendTest {
         membershipService.cancel(renewed, owner);
         check("Cancelling keeps the money in the revenue (no refund)", revenueBeforeCancelM.compareTo(billDAO.revenueBetween(today, today)) == 0);
 
+        // ---------- expense history (never overwritten) ----------
+        int editedId = expenseDAO.findAll().stream().filter(x -> x.getCategory().equals("MAINTENANCE")).findFirst().get().getId();
+        check("An edited expense keeps its old values in the history", expenseDAO.findChanges(editedId).size() == 1
+                && expenseDAO.findChanges(editedId).get(0).contains("ELECTRICITY Rs. 1200.50"));
+        check("A deleted expense is kept (listed under deleted), not removed", expenseDAO.findDeleted().size() == 1
+                && expenseDAO.findDeleted().get(0).getCategory().equals("ELECTRICITY"));
+        check("The food & drink stock category exists", sqlOk(() -> expenseDAO.add(new Expense(0, "FOOD_STOCK", new BigDecimal("300"), today, "Coffee beans", "CASH"), owner.getId())));
+
+        // ---------- monthly report ----------
+        java.time.YearMonth thisMonth = java.time.YearMonth.from(today);
+        ReportService reportService = new ReportService();
+        MonthlyReport mr = reportService.monthly(thisMonth);
+        check("Report: revenue = table time + food - discounts + memberships",
+                mr.tableTime.add(mr.foodAndDrinks).subtract(mr.billDiscounts).add(mr.memberships).compareTo(mr.revenue) == 0);
+        check("Report: revenue is the same as the dashboard's (all money received this month)",
+                mr.revenue.compareTo(billDAO.revenueBetween(thisMonth.atDay(1), thisMonth.atEndOfMonth())) == 0);
+        check("Report: Cash + UPI = revenue", mr.cash.add(mr.upi).compareTo(mr.revenue) == 0);
+        check("Report: membership sales Rs. 1000 (2 sold; cancelling does not refund)", same("1000", mr.memberships) && mr.membershipsSold == 2);
+        check("Report: food & drinks of the paid bill (Rs. 190)", same("190", mr.foodAndDrinks));
+        check("Report: discounts per occasion add up to the discounts", mr.discountsByOccasion.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add)
+                .compareTo(mr.billDiscounts) == 0 && mr.billDiscounts.signum() > 0);
+        check("Report: the refunded Christmas bill's discount is not counted", !mr.discountsByOccasion.containsKey("Christmas"));
+        check("Report: totals per Billed-by person add up to the revenue and the number of sales",
+                mr.byStaff.stream().map(x -> x.revenue).reduce(BigDecimal.ZERO, BigDecimal::add).compareTo(mr.revenue) == 0
+                        && mr.byStaff.stream().mapToInt(x -> x.sales).sum() == mr.paidBills + mr.membershipsSold);
+        check("Report: revenue per day adds up to the month", mr.revenueByDay.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add)
+                .compareTo(mr.revenue) == 0 && mr.revenueByDay.size() == thisMonth.lengthOfMonth());
+        check("Report: expenses = expense total of the month (deleted ones not counted)",
+                mr.expenses.compareTo(expenseDAO.totalBetween(thisMonth.atDay(1), thisMonth.atEndOfMonth())) == 0
+                        && mr.expensesByCategory.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add).compareTo(mr.expenses) == 0);
+        check("Report: profit = revenue - expenses", mr.getProfit().compareTo(mr.revenue.subtract(mr.expenses)) == 0);
+        List<Object[]> six = reportService.lastSixMonths(thisMonth);
+        check("Report: the trend has 6 months ending with this month, with this month's revenue",
+                six.size() == 6 && six.get(5)[0].equals(thisMonth) && ((BigDecimal) six.get(5)[1]).compareTo(mr.revenue) == 0);
+
+        // ---------- backups ----------
+        File backupDir = new File("target/backend-test-backups");
+        if (backupDir.isDirectory()) for (File old : backupDir.listFiles()) old.delete();
+        AppSettings.setBackupFolder(backupDir.getAbsolutePath());
+        AppSettings.setBackupKeep(2);
+        AppSettings.setAutoBackup(true);
+        BackupService backups = new BackupService();
+        String[] tablesToCompare = {"customers", "bills", "payments", "payment_parts", "order_items", "memberships", "expenses",
+                "expense_changes", "staff_members", "menu_items", "sessions", "schema_version"};
+        String before = rowCounts(tablesToCompare);
+        check("An automatic backup is due when there is none for today", backups.isAutomaticBackupDue());
+        File backupFile = backups.backupNow("MANUAL");
+        String backupText = new String(Files.readAllBytes(backupFile.toPath()), java.nio.charset.StandardCharsets.UTF_8);
+        check("Backup now writes a file with every table and its rows", backupFile.isFile() && backupText.startsWith("-- CUE 147 backup")
+                && backupText.contains("CREATE TABLE `bills`") && backupText.contains("INSERT INTO `payment_parts`"));
+        check("After a backup today none is due any more", !backups.isAutomaticBackupDue());
+        check("The last successful backup is shown (time, computer, kind)", backups.lastSuccessfulBackup().contains("(manual)"));
+        customerDAO.add(new Customer("After Backup", "9000000002", Customer.MEN));
+        backups.restore(backupFile);
+        check("Restore brings back exactly the data of the backup (every table)", before.equals(rowCounts(tablesToCompare))
+                && customerDAO.search("After Backup").isEmpty());
+        check("After a restore the database is at the newest version", database.SchemaMigrator.migrate() == database.SchemaMigrator.latestVersion());
+        check("After a restore MySQL still refuses a second live bill for a game (generated columns rebuilt)",
+                duplicateBillRejected(billDAO.search("", false).stream().filter(b -> !b.isCancelled()).findFirst().get().getSessionId()));
+        check("A safety backup of the current data is made before restoring", backups.listBackups().size() == 2);
+        backups.backupNow("MANUAL");
+        backups.backupNow("MANUAL");
+        check("Only the newest backups are kept (2 here)", backups.listBackups().size() == 2);
+        File notABackup = File.createTempFile("cue147", ".sql");
+        Files.write(notABackup.toPath(), "DROP DATABASE cue147;".getBytes());
+        check("A file that is not a CUE 147 backup is refused", throwsType(() -> backups.restore(notABackup), BusinessException.class)
+                && before.equals(rowCounts(tablesToCompare)));
+        notABackup.delete();
+        AppSettings.resetAll();
+
         System.out.println(passed + " passed, " + failed + " failed");
         if (failed > 0) System.exit(1);
     }
@@ -575,6 +646,8 @@ public class BackendTest {
 
     static boolean sqlFails(Action a) { return fails(a); }
 
+    static boolean sqlOk(Action a) { return !fails(a); }
+
     /** Tries to insert a second LIVE bill for the same session; MySQL must say "duplicate" (error 1062). */
     static boolean duplicateBillRejected(int sessionId) throws SQLException {
         String sql = "INSERT INTO bills (bill_number, session_id, billed_minutes, hourly_rate, subtotal, discount_percent, final_amount, created_at) "
@@ -588,6 +661,20 @@ public class BackendTest {
         }
     }
 
+    /** "customers=4 bills=9 ..." - used to compare the whole database before and after a restore. */
+    static String rowCounts(String[] tables) throws SQLException {
+        StringBuilder sb = new StringBuilder();
+        try (Connection con = DBConnection.getConnection(); Statement st = con.createStatement()) {
+            for (String t : tables) {
+                try (java.sql.ResultSet rs = st.executeQuery("SELECT COUNT(*) FROM " + t)) {
+                    rs.next();
+                    sb.append(t).append('=').append(rs.getInt(1)).append(' ');
+                }
+            }
+        }
+        return sb.toString();
+    }
+
     static int pool2Id(GameTableDAO dao) throws SQLException { return find(dao, "Pool Table 2").getId(); }
 
     static GameTable find(GameTableDAO dao, String name) throws SQLException {
@@ -598,7 +685,7 @@ public class BackendTest {
     /** Empties the transaction tables of the TEST database so every test run starts clean. */
     static void cleanTestDatabase() throws SQLException {
         try (Connection con = DBConnection.getConnection(); Statement st = con.createStatement()) {
-            for (String table : new String[]{"payment_parts", "payments", "order_items", "bills", "sessions", "bookings", "expenses",
+            for (String table : new String[]{"payment_parts", "payments", "order_items", "bills", "sessions", "bookings", "expense_changes", "expenses", "backup_log",
                     "memberships", "menu_items", "staff_shifts", "staff_members", "users"}) {
                 st.executeUpdate("DELETE FROM " + table);
             }

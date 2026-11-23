@@ -41,6 +41,16 @@ public class AppSettings {
     public static int getLastBilledById() { return PREFS.getInt("lastBilledBy", 0); }
     public static void setLastBilledById(int staffId) { PREFS.putInt("lastBilledBy", staffId); }
 
+    // Backups (saved per computer: each computer can keep copies in its own folder)
+    public static String getBackupFolder() {
+        return PREFS.get("backupFolder", java.nio.file.Paths.get(System.getProperty("user.home"), "CUE147 Backups").toString());
+    }
+    public static void setBackupFolder(String folder) { PREFS.put("backupFolder", folder); }
+    public static int getBackupKeep() { return PREFS.getInt("backupKeep", 14); }
+    public static void setBackupKeep(int count) { PREFS.putInt("backupKeep", count); }
+    public static boolean isAutoBackup() { return PREFS.getBoolean("autoBackup", true); }
+    public static void setAutoBackup(boolean on) { PREFS.putBoolean("autoBackup", on); }
+
     public static void resetAll() {
         try {
             PREFS.clear();

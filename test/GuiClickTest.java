@@ -327,6 +327,7 @@ public class GuiClickTest {
 
         BackendTest.cleanTestDatabase();
         util.AppSettings.setLastBilledById(0);   // the counter has no "last Billed by" yet
+        util.AppSettings.setAutoBackup(false);   // tests never write automatic backups
         edt(Theme::install);
         CustomerDAO customerDAO = new CustomerDAO();
         GameTableDAO tableDAO = new GameTableDAO();
@@ -735,6 +736,21 @@ public class GuiClickTest {
             return "MySQL has 0 expenses; dashboard today's expenses = " + s.todayExpenses;
         });
 
+        test("Expenses", "Show deleted + Change History", "The deleted expense is still kept, with its old amount in the history", () -> {
+            AbstractButton showDeleted = findButton(ep, "Show deleted");
+            SwingUtilities.invokeLater(showDeleted::doClick);
+            sleep(500);
+            int rows = onEdt(() -> expenseTable.getRowCount());
+            check(rows == 1, "deleted list has " + rows + " rows");
+            selectRow(expenseTable, 0);
+            click(ep, "Change History");
+            String text = answer("OK");
+            check(text.contains("Before: RENT Rs. 1500.00"), text);
+            SwingUtilities.invokeLater(showDeleted::doClick);
+            sleep(400);
+            return "Deleted list shows 1 expense; history: \"" + text + "\"";
+        });
+
         // ================= CUSTOMER SEARCH + ONE-SCREEN CHECKOUT =================
         goTo("Tables");
         TablesPanel tpk = panel(TablesPanel.class);
@@ -1132,7 +1148,71 @@ public class GuiClickTest {
             check(text.contains("DAILY REPORT") && text.contains("Revenue"), text);
             return "Pop-up: \"" + text + "\"";
         });
-        goTo("Reports"); sleep(500); shot(frame, "12-reports");
+        goTo("Reports");
+        ReportsPanel rp = panel(ReportsPanel.class);
+        test("Reports", "Monthly summary for this month", "Revenue card = money received this month; comparison table filled", () -> {
+            click(rp, "Show");
+            sleep(500);
+            java.time.YearMonth month = java.time.YearMonth.now();
+            BigDecimal revenue = billDAO.revenueBetween(month.atDay(1), month.atEndOfMonth());
+            check(hasLabel(rp, Theme.money0(revenue)), "revenue card does not show " + Theme.money0(revenue));
+            JTable compare = all(rp, JTable.class, true).get(0);
+            int rows = onEdt(compare::getRowCount);
+            check(rows == 11, "comparison rows = " + rows);
+            String note = labelStarting(rp, "vs ");
+            check(note.startsWith("vs " + month.minusMonths(1).format(java.time.format.DateTimeFormatter.ofPattern("MMM yyyy"))), note);
+            return "Revenue card " + Theme.money0(revenue) + "; " + rows + " comparison rows; note \"" + note + "\"";
+        });
+        shot(frame, "12-reports");
+        test("Reports", "Charts tab", "Trend chart (6 months) and revenue per day are shown", () -> {
+            JTabbedPane tabs = all(rp, JTabbedPane.class, true).get(0);
+            edt(() -> tabs.setSelectedIndex(1));
+            sleep(500);
+            check(all(rp, BarChart.class, true).size() == 2, "charts not shown");
+            shot(frame, "12b-reports-charts");
+            edt(() -> tabs.setSelectedIndex(0));
+            return "2 charts shown";
+        });
+        for (String type : new String[]{"CSV", "PDF"}) {
+            test("Reports", "Export " + type, "File saved with the month's numbers", () -> {
+                File out = new File("docs/test-results/sample-monthly-report." + type.toLowerCase());
+                out.delete();
+                click(rp, "Export " + type);
+                JDialog d = waitForDialogWith(JFileChooser.class);
+                check(d != null, "no file window");
+                JFileChooser chooser = all(d, JFileChooser.class, false).get(0);
+                edt(() -> { chooser.setSelectedFile(out.getAbsoluteFile()); chooser.approveSelection(); });
+                String text = answer("OK");
+                check(out.length() > 300, "file not written");
+                String start = new String(java.nio.file.Files.readAllBytes(out.toPath()), 0, 30, java.nio.charset.StandardCharsets.ISO_8859_1);
+                String clean = start.startsWith("\u00EF\u00BB\u00BF") ? start.substring(3) : start;   // CSV starts with a UTF-8 marker for Excel
+                check(type.equals("PDF") ? clean.startsWith("%PDF") : clean.startsWith("Section,Item"), "file starts with " + start);
+                return "Pop-up: \"" + text.replace("\n", " ") + "\"; " + out.getPath() + " (" + out.length() + " bytes)";
+            });
+        }
+        test("Billing", "Billed-by filter on the Billing screen", "Only the bills of the chosen person are listed", () -> {
+            goTo("Billing");
+            BillingPanel bf = panel(BillingPanel.class);
+            JComboBox<?> filter = named(bf, JComboBox.class, "billedByFilter");
+            chooseItem(filter, "Counter Staff");
+            sleep(500);
+            JTable bills = all(bf, JTable.class, true).get(0);
+            int shown = onEdt(bills::getRowCount);
+            long expected = billDAO.search("", false).stream().filter(b -> "Counter Staff".equals(b.getBilledBy()) && b.getBilledByStaffId() != null).count();
+            check(shown == expected && shown > 0, "shown " + shown + ", expected " + expected);
+            String wrongName = onEdt(() -> { for (int r = 0; r < bills.getRowCount(); r++)
+                if (!"Counter Staff".equals(bills.getValueAt(r, 5))) return String.valueOf(bills.getValueAt(r, 5)); return ""; });
+            check(wrongName.isEmpty(), "a bill of " + wrongName + " is listed");
+            chooseItem(filter, "Ken");                     // switched off earlier, so this person has no bills
+            sleep(400);
+            int none = onEdt(bills::getRowCount);
+            check(none == 0, "Ken shows " + none + " bills");
+            chooseItem(filter, "All staff");
+            sleep(400);
+            int all = onEdt(bills::getRowCount);
+            check(all >= shown, "All staff shows " + all);
+            return shown + " bills billed by Counter Staff (all rows say so); Ken " + none + "; All staff " + all;
+        });
         goTo("Staff"); sleep(500); shot(frame, "13-staff");
         StaffPanel stp = panel(StaffPanel.class);
         test("Staff", "Change My Password with a wrong current password", "Pop-up: the current password is wrong; nothing changes", () -> {
@@ -1310,9 +1390,71 @@ public class GuiClickTest {
             return "Pop-up: \"" + text + "\"; Rahul is still in MySQL";
         });
 
+        // ================= BACKUPS =================
+        File guiBackups = new File("target/gui-test-backups").getAbsoluteFile();
+        if (guiBackups.isDirectory()) for (File old : guiBackups.listFiles()) old.delete();
+        test("Backups", "Settings > Backups: choose a folder, keep 3, Save", "Saved for this computer", () -> {
+            goTo("Settings");
+            SettingsPanel sb = panel(SettingsPanel.class);
+            JTabbedPane tabs = all(sb, JTabbedPane.class, true).get(0);
+            edt(() -> tabs.setSelectedIndex(7));
+            sleep(400);
+            JTextField folder = named(sb, JTextField.class, "backupFolder");
+            JSpinner keep = named(sb, JSpinner.class, "backupKeep");
+            edt(() -> { folder.setText(guiBackups.getPath()); keep.setValue(3); });
+            click(sb, "Save Backup Settings");
+            String text = answer("OK");
+            check(util.AppSettings.getBackupFolder().equals(guiBackups.getPath()) && util.AppSettings.getBackupKeep() == 3, "not saved");
+            return "Pop-up: \"" + text + "\"; folder " + guiBackups.getName() + ", keep 3";
+        });
+        test("Backups", "Backup Now", "A backup file is saved; 'Last successful backup' shows it", () -> {
+            SettingsPanel sb = panel(SettingsPanel.class);
+            click(sb, "Backup Now");
+            String text = answer("OK");
+            check(text.contains("Backup saved"), text);
+            check(new BackupService().listBackups().size() == 1, "no file");
+            sleep(300);
+            String last = labelContaining(sb, "(manual)");
+            check(!last.equals("none"), "last backup not shown");
+            shot(frame, "11f-settings-backups");
+            return "Pop-up: \"" + text.replace("\n", " ") + "\"; last backup: " + last;
+        });
+        test("Backups", "Restore from Backup (choose file, Yes, type RESTORE)", "Same data as the backup; back at the login screen", () -> {
+            String before = BackendTest.rowCounts(new String[]{"customers", "bills", "payments", "payment_parts", "order_items", "memberships", "expenses"});
+            File backup = new BackupService().listBackups().get(0);
+            customerDAO.add(new Customer("Added After Backup", "9000000044", Customer.MEN));
+            SettingsPanel sb = panel(SettingsPanel.class);
+            click(sb, "Restore from Backup...");
+            JDialog d = waitForDialogWith(JFileChooser.class);
+            check(d != null, "no file window");
+            JFileChooser chooser = all(d, JFileChooser.class, false).get(0);
+            edt(() -> { chooser.setSelectedFile(backup); chooser.approveSelection(); });
+            String question = answer("Yes");
+            check(question.contains("REPLACED"), question);
+            JDialog typeIt = waitForDialogWith(JTextField.class);
+            edt(() -> all(typeIt, JTextField.class, false).get(0).setText("RESTORE"));
+            answer("OK");
+            String done = "";
+            for (int i = 0; i < 3 && !done.contains("is back"); i++) done = answer("OK");
+            check(done.contains("is back"), done);
+            check(waitForLogin() != null, "login window did not open");
+            String after = BackendTest.rowCounts(new String[]{"customers", "bills", "payments", "payment_parts", "order_items", "memberships", "expenses"});
+            check(before.equals(after) && customerDAO.search("9000000044").isEmpty(), before + " / " + after);
+            return "Pop-up: \"" + done.replace("\n", " ") + "\"; counts before and after: " + after.trim();
+        });
+        test("Backups", "Log in again after the restore", "Main window opens", () -> {
+            LoginFrame lf = waitForLogin();
+            JTextFieldPair fr = new JTextFieldPair(lf);
+            setText(field(fr.user), "owner"); setText(field(fr.pass), "owner123"); click(lf, "Owner");
+            click(lf, "LOGIN");
+            check(waitForMainFrame() != null, "main window did not open");
+            sleep(800);
+            return "Logged in again as owner";
+        });
+
         // ================= LOGOUT / STAFF =================
         test("Logout", "Logout button, answer Yes", "Login window opens again", () -> {
-            click(frame, "Logout"); answer("Yes");
+            click(mainFrame(), "Logout"); answer("Yes");
             LoginFrame again = waitForLogin();
             check(again != null, "login window did not open");
             return "Login window is shown again";

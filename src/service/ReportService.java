@@ -39,6 +39,23 @@ public class ReportService {
         return s;
     }
 
+    /** The full report of one month (see MonthlyReport). */
+    public model.MonthlyReport monthly(java.time.YearMonth month) throws SQLException {
+        return new dao.ReportDAO().monthly(month);
+    }
+
+    /** Revenue and expenses of the given month and the 5 months before it, oldest first: {month, revenue, expenses}. */
+    public List<Object[]> lastSixMonths(java.time.YearMonth month) throws SQLException {
+        dao.ReportDAO reportDAO = new dao.ReportDAO();
+        List<Object[]> list = new ArrayList<>();
+        for (int i = 5; i >= 0; i--) {
+            java.time.YearMonth m = month.minusMonths(i);
+            java.math.BigDecimal[] t = reportDAO.totals(m);
+            list.add(new Object[]{m, t[0], t[1]});
+        }
+        return list;
+    }
+
     /** Table usage for the last "days" days (1 = today only, 7 = this week). */
     public List<String[]> getTableUsage(int days) throws SQLException {
         LocalDate today = LocalDate.now();

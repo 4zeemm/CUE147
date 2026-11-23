@@ -5,7 +5,7 @@ import java.time.LocalDate;
 
 /** Money spent by the club (rent, electricity, salaries ...). */
 public class Expense implements Receiptable {
-    public static final String[] CATEGORIES = {"RENT", "ELECTRICITY", "SALARIES", "MAINTENANCE", "EQUIPMENT", "MISCELLANEOUS"};
+    public static final String[] CATEGORIES = {"RENT", "ELECTRICITY", "SALARIES", "MAINTENANCE", "EQUIPMENT", "FOOD_STOCK", "MISCELLANEOUS"};
 
     private int id;
     private String category;

@@ -123,7 +123,17 @@ Phase 5: UI polish (FlatLaf, dashboard), installers and GitHub Actions.
 - Phase status: Phase 1 done (Maven, shared-database settings, migrations). Phase 2 done (customer
   search-or-add picker with membership, one-screen checkout, discounts, split payments, Billed by). Phase 3 done
   (membership plans + Sell Membership with split payment; food & drinks menu, orders during a game, F&B on the bill).
-  Next: Phase 4.
+  Phase 4 done (expense history + soft delete, monthly reports with comparison, charts, CSV/PDF export,
+  Billed-by filter, Java backups: daily automatic, Backup now, Restore). Next: Phase 5.
+- Reports: SQL in `dao.ReportDAO`, numbers in `model.MonthlyReport`. Money counts on the day it was RECEIVED
+  (payments PAID, bills + memberships). Revenue = table time + food - bill discounts + memberships (tested).
+- Old records are never overwritten: expenses are edited with their old values copied to `expense_changes`;
+  "delete" sets `expenses.status = 'DELETED'`. Bills/payments/memberships use statuses, never DELETE.
+- Backups: `database.DatabaseBackup` (pure JDBC dump/restore, works on Windows and Mac without mysqldump),
+  `service.BackupService` (folder, keep N, daily automatic from MainFrame's timer, `backup_log` table).
+  Restore drops every table, loads the file, then runs the migrator; a BEFORE_RESTORE backup is made first.
+  Test programs must call `AppSettings.setAutoBackup(false)` before opening windows.
+- PDF export uses Apache PDFBox (standard fonts cannot draw the rupee sign: PDFs say "Rs.").
 - Checkout money rules live in `service.Checkout` (pure, JUnit-tested in `test/service/CheckoutTest.java`).
   UI: `ui.CheckoutDialog` (opened after End Game and from Billing > Checkout / Pay). Saving: `BillService.completeCheckout`
   -> `BillDAO.completeCheckout` (one transaction). Bill subtotal = `bills.table_amount` (+ F&B in Phase 3).

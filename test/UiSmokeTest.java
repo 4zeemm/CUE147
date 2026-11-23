@@ -28,6 +28,7 @@ public class UiSmokeTest {
     }
 
     static Set<String> openAllScreens(String username, String password, String[] screens) throws Exception {
+        util.AppSettings.setAutoBackup(false);   // tests never write automatic backups
         User user = new AuthService().login(username, password);
         MainFrame[] frame = new MainFrame[1];
         SwingUtilities.invokeAndWait(() -> frame[0] = new MainFrame(user));

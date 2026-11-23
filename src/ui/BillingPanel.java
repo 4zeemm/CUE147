@@ -27,6 +27,7 @@ public class BillingPanel extends ScreenPanel {
 
     private final JTextField searchField = Theme.field(14);
     private final JCheckBox unpaidBox = Theme.checkBox("Unpaid only");
+    private final JComboBox<Object> staffBox = new JComboBox<>();   // "All staff" or one StaffMember
 
     private final JLabel billNoLabel = Theme.label("-", Theme.HEADING, Theme.GOLD);
     private final JLabel customerLabel = Theme.label("-", Theme.BODY, Theme.TEXT);
@@ -43,10 +44,10 @@ public class BillingPanel extends ScreenPanel {
     public BillingPanel(MainFrame frame) {
         super(frame);
         add(header("Billing", "Bill history and payments (a bill is created when a game ends)",
-                Theme.label("Search:", Theme.BODY, Theme.MUTED), searchField, unpaidBox,
+                Theme.label("Search:", Theme.BODY, Theme.MUTED), searchField, staffBox, unpaidBox,
                 Theme.button("Search", Theme.BLUE, e -> refresh()),
                 Theme.button("Export CSV", Theme.AMBER, e -> exportTable("bills", model)),
-                Theme.button("Refresh", Theme.NEUTRAL, e -> { searchField.setText(""); unpaidBox.setSelected(false); refresh(); })), BorderLayout.NORTH);
+                Theme.button("Refresh", Theme.NEUTRAL, e -> { searchField.setText(""); unpaidBox.setSelected(false); staffBox.setSelectedIndex(0); refresh(); })), BorderLayout.NORTH);
 
         Theme.styleTable(table);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -60,6 +61,11 @@ public class BillingPanel extends ScreenPanel {
         for (int i = 0; i < widths.length; i++) table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
         searchField.addActionListener(e -> refresh());
         unpaidBox.addActionListener(e -> refresh());
+        staffBox.setName("billedByFilter");
+        staffBox.setFont(Theme.BODY);
+        staffBox.setToolTipText("Show only the bills of one person (Billed by)");
+        staffBox.addItem("All staff");
+        staffBox.addActionListener(e -> { if (isShowing()) refresh(); });
 
         JPanel centre = Theme.panel(new BorderLayout(16, 0));
         centre.add(Theme.scroll(table), BorderLayout.CENTER);
@@ -117,7 +123,10 @@ public class BillingPanel extends ScreenPanel {
     public void refresh() {
         try {
             shown.clear();
-            shown.addAll(billDAO.search(searchField.getText().trim(), unpaidBox.isSelected()));
+            loadStaffFilter();
+            Object who = staffBox.getSelectedItem();
+            Integer staffId = who instanceof model.StaffMember ? ((model.StaffMember) who).getId() : null;
+            shown.addAll(billDAO.search(searchField.getText().trim(), unpaidBox.isSelected(), staffId));
         } catch (SQLException e) {
             showDbError(e);
             return;
@@ -131,6 +140,19 @@ public class BillingPanel extends ScreenPanel {
         }
         showSelected();
         frame.setStatus(shown.size() + " bill(s) found");
+    }
+
+    /** Fills the Billed-by filter with every name (also switched-off people, for old bills). */
+    private void loadStaffFilter() throws SQLException {
+        java.util.List<model.StaffMember> staff = new dao.StaffMemberDAO().findAll();
+        if (staffBox.getItemCount() == staff.size() + 1) return;
+        Object chosen = staffBox.getSelectedItem();
+        staffBox.removeAllItems();
+        staffBox.addItem("All staff");
+        for (model.StaffMember m : staff) {
+            staffBox.addItem(m);
+            if (chosen instanceof model.StaffMember && ((model.StaffMember) chosen).getId() == m.getId()) staffBox.setSelectedItem(m);
+        }
     }
 
     private Bill selectedBill() {

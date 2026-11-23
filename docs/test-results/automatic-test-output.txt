@@ -1,7 +1,7 @@
 === JUnit tests and build (Maven) ===
 
 PASS  Maven build and JUnit tests (details: target/surefire-reports)
-cue147_test is at database version 3
+cue147_test is at database version 4
 === Billing calculator tests ===
 PASS  0 min (minimum one hour), rate 300  -> 300.00
 PASS  20 min, rate 300  -> 300.00
@@ -81,7 +81,7 @@ PASS  Staff does not have permission to manage (delete) expenses
 PASS  Owner has permission to delete expenses
 PASS  Without pressing Yes (Cancel) nothing is deleted
 PASS  Deleting an expense by its id returns true
-PASS  The record is really gone from MySQL
+PASS  The expense leaves the list (kept in MySQL as DELETED)
 PASS  The other expense (rent) was NOT deleted
 PASS  Deleting the same id again returns false (no error)
 PASS  Deleting an unknown id deletes nothing
@@ -216,6 +216,7 @@ PASS  Paying the same bill again is refused
 PASS  A split bill's method cannot be changed
 PASS  Refunding a split bill takes the whole 243 out of revenue
 PASS  Pay Later keeps the bill UNPAID with its discount and Billed by
+PASS  A bill without an occasion still knows who billed it (by id)
 PASS  Opening the checkout again brings back the saved discount
 PASS  A one-method payment saves one part with the full amount
 PASS  Changing the method of a one-method bill also changes its part
@@ -245,7 +246,32 @@ PASS  The customer record shows the membership
 PASS  Buying again while still a member starts the day after the current end
 PASS  Staff cannot cancel a membership
 PASS  Cancelling keeps the money in the revenue (no refund)
-219 passed, 0 failed
+PASS  An edited expense keeps its old values in the history
+PASS  A deleted expense is kept (listed under deleted), not removed
+PASS  The food & drink stock category exists
+PASS  Report: revenue = table time + food - discounts + memberships
+PASS  Report: revenue is the same as the dashboard's (all money received this month)
+PASS  Report: Cash + UPI = revenue
+PASS  Report: membership sales Rs. 1000 (2 sold; cancelling does not refund)
+PASS  Report: food & drinks of the paid bill (Rs. 190)
+PASS  Report: discounts per occasion add up to the discounts
+PASS  Report: the refunded Christmas bill's discount is not counted
+PASS  Report: totals per Billed-by person add up to the revenue and the number of sales
+PASS  Report: revenue per day adds up to the month
+PASS  Report: expenses = expense total of the month (deleted ones not counted)
+PASS  Report: profit = revenue - expenses
+PASS  Report: the trend has 6 months ending with this month, with this month's revenue
+PASS  An automatic backup is due when there is none for today
+PASS  Backup now writes a file with every table and its rows
+PASS  After a backup today none is due any more
+PASS  The last successful backup is shown (time, computer, kind)
+PASS  Restore brings back exactly the data of the backup (every table)
+PASS  After a restore the database is at the newest version
+PASS  After a restore MySQL still refuses a second live bill for a game (generated columns rebuilt)
+PASS  A safety backup of the current data is made before restoring
+PASS  Only the newest backups are kept (2 here)
+PASS  A file that is not a CUE 147 backup is refused
+245 passed, 0 failed
 === Restart test (two separate programs) ===
 Program 1: game started on PS5 Station 1, now closing the program...
 PASS  Program 2: the running game survived the restart (table is OCCUPIED, 1 active session)
@@ -312,53 +338,63 @@ PASS  G46 Expenses - Edit the expense (amount 2000)  ->  MySQL amount = 2000.00
 PASS  G47 Dashboard - Dashboard figures after the sales and the expense  ->  Revenue 270.00, expenses 2000.00, estimated profit -1730.00
 PASS  G48 Expenses - Delete: press Cancel in the question  ->  Question: "Are you sure you want to delete this exp..."; after Cancel MySQL still has 1 expense
 PASS  G49 Expenses - Delete: press Yes in the question  ->  MySQL has 0 expenses; dashboard today's expenses = 0.00
-PASS  G50 Customers - Start Game: a new customer is added from the search box  ->  Phone pre-filled, only the name typed; pop-up: "Game started on Pool Table 2 Player: Kiran Rao Rate: ₹270 / hour"
-PASS  G51 Checkout - End Game: 10% Christmas discount, then Pay Later  ->  Message for 150%: "A percentage discount cannot be more than 100%."; MySQL: UNPAID, subtotal 270, discount 10% (Christmas) = Rs. 27.00, total Rs. 243.00, billed by Counter Staff (remembered)
-PASS  G52 Checkout - Billing > Checkout / Pay: Rs. 100 UPI + the rest in cash  ->  Remaining Rs. 143 after UPI 100, Complete Bill was off until paid; pop-up: "Payment of ₹243.00 received by SPLIT."; MySQL parts: UPI 100 + CASH 143; history shows Billed by Counter Staff
-PASS  G53 Bookings - Book a table (defaults: today 19:00, 1 hour)  ->  Pop-up: "Booking confirmed! C..."; MySQL has 1 booking
-PASS  G54 Bookings - Cancel the booking  ->  MySQL booking status = CANCELLED
-PASS  G55 Bookings - Book 19:00, then try 19:30 on the same table  ->  Pop-up: "Pool Table 1 already has a booking that overlaps 19:30 (1.0 h) on 2026-11-23."; MySQL still has only 1 confirmed booking (then cancelled)
-PASS  G56 Bookings - Priya books Pool Table 1 from now; Rahul tries to play there  ->  Pop-up: "Pool Table 1 is booked for Priya Nair from 17:02 to 18:02. Start the game for Priya Nair, or cancel the booking first."; no game started (booking cancelled afterwards)
-PASS  G57 Membership - Sell Membership while the Monthly price is not set  ->  Pop-up: "The price of the Monthly plan is not set yet. The owner sets it in Settings > Membership Plans."
-PASS  G58 Settings - Membership Plans: set the Monthly price to Rs. 500  ->  Pop-up: "Monthly plan: 1 month(s), ₹500, 5% off games. New sales use these values; memberships already sold do not change."
-PASS  G59 Membership - Sell Monthly to Kiran: Rs. 200 UPI + the rest in cash  ->  Dates shown: 23 Nov 2026  to  22 Dec 2026; pop-up: "Kiran Rao: Monthly member until 22 Dec 2026 (5% off) Paid ₹500.00 by SPLIT."; revenue +500
-PASS  G60 Customers - Start Game shows the chosen customer's membership  ->  Kiran Rao: "Monthly member until 22 Dec 2026  (5% off)"
-PASS  G61 Settings - Change Pool price for Men to Rs. 280  ->  MySQL: Pool / Men = Rs. 280.00
-PASS  G62 Settings - Change the price back to Rs. 270  ->  MySQL: Pool / Men = Rs. 270.00
-PASS  G63 Settings - Appearance: Midnight Blue, text size 16, Apply  ->  Pop-up: "Saved: Midnight Blue, text size 16. Close CUE 147 and start it again to see the new look."; saved theme = Midnight Blue, size = 16
-PASS  G64 Settings - Appearance: switch notifications OFF  ->  Top bar: "Notifications (off)"; pop-up: "Notifications are switched off. Turn them on in Settings > Appearance."
-PASS  G65 Settings - Appearance: switch notifications ON again  ->  Top bar: "Notifications (0)"
-PASS  G66 Settings - Club Settings: save the club name and phone  ->  Pop-up: "Club settings saved on this computer."; saved club name = CUE 147 Test Club
-PASS  G67 Settings - Staff List: add Ken, refuse a duplicate, switch Ken off  ->  Ken added; duplicate pop-up: "This name is already in the list."; Ken switched off
-PASS  G68 Settings - Food & Drinks Menu: add Cold Coffee (Rs. 80) and Chips (Rs. 30)  ->  MySQL menu: Cold Coffee Rs. 80, Chips Rs. 30; duplicate pop-up: "This item is already on the menu."
-PASS  G69 Billing - View / Print Bill: print the bill to a file  ->  Bill shows "CUE 147 TEST CLUB"; printed to docs/test-results/sample-bill-print.ps (4339 bytes, starts with %!PS)
-PASS  G70 Food & Drinks - During a game: Food & Drinks > 2 x Cold Coffee  ->  MySQL order of the game: Cold Coffee x2 (Rs. 160)
-PASS  G71 Food & Drinks - End Game: coffee is on the bill, add Chips at the checkout, Pay UPI  ->  Pop-up: "Payment of ₹410.00 received by UPI."; MySQL: food 190.00 (2 lines), total 410.00, UPI
-PASS  G72 Reports - Daily Report button  ->  Pop-up: "DAILY REPORT Revenue: ₹1,423.00 Games played: 3 Busiest table: Pool Table 1"
-PASS  G73 Staff - Change My Password with a wrong current password  ->  Pop-up: "The current password is wrong."; owner123 still works
-PASS  G74 Staff - Change My Password (owner123 -> owner456)  ->  Pop-up: "Your password has been changed. Use the new password next time you log in."; owner456 logs in, owner123 refused (then changed back)
-PASS  G75 Right-click menu - Right-click a table card (Pool Table 2)  ->  Menu items: [Start Game, End Game, Food & Drinks, Cancel Game (started by mistake), Adjust Start Time, View Details]
-PASS  G76 Right-click menu - Right-click > View Details  ->  Pop-up: "Pool Table 2 Type: Pool Status: AVAILABLE Price (Men): ₹270 / hour Price (L..."
-PASS  G77 Right-click menu - Right-click > Start Game (Pool Table 2, Rahul Sharma)  ->  Card shows OCCUPIED; MySQL active sessions = 1
-PASS  G78 Corrections - Right-click > Adjust Start Time (20 minutes earlier)  ->  MySQL start time is 20 minutes ago; card timer shows about 00:20
-PASS  G79 Corrections - Right-click > Cancel Game (started by mistake)  ->  No new bill (4 bills before and after); Pool Table 2 is AVAILABLE again
-PASS  G80 Corrections - Reopen Game after an accidental End Game (bill not paid)  ->  Pop-up: "The game is running again on Pool Table 2. See the Tables screen."; MySQL: bill CUE20261123-0005 CANCELLED, Pool Table 2 ACTIVE again
-PASS  G81 Corrections - End the reopened game and pay  ->  New bill CUE20261123-0006 PAID (CASH); cancelled bills kept in history: 1
-PASS  G82 Auto refresh - Another counter starts a game (directly in MySQL)  ->  Card changed to OCCUPIED by itself after about 3 seconds (auto refresh every 15 seconds)
-PASS  G83 Dashboard - Notifications button  ->  Pop-up: "• No new notifications"
-PASS  G84 Navigation - Menu: Help > About Cue 147  ->  Pop-up: "CUE 147 - Snooker & Pool Club Management..."
-PASS  G85 Navigation - Toolbar button: New Customer  ->  Customers screen is shown
-PASS  G86 Customers - Delete a customer who has bills (Rahul Sharma)  ->  Pop-up: "Rahul Sharma has games, bookings or a membership, so the record is kept (the bills must stay). Nothing was deleted."; Rahul is still in MySQL
-PASS  G87 Logout - Logout button, answer Yes  ->  Login window is shown again
-PASS  G88 Permissions - Login as Staff  ->  Main window opened for staff
-PASS  G89 Permissions - Staff sidebar has no Expenses, Reports or Settings  ->  Sidebar: [Dashboard, Tables, Customers, Bookings, Billing, Membership, Staff] (no Expenses, Reports, Settings); the Reports menu is greyed out
-PASS  G90 Permissions - Staff Tables screen has no Add / Remove / Maintenance  ->  Add, Edit, Remove, Maintenance buttons are not shown
-PASS  G91 Permissions - Staff runs a game and takes UPI payment  ->  MySQL: bill CUE20261123-0008 PAID (UPI); served by Counter Staff, received by Counter Staff
-PASS  G92 Permissions - Staff Customers screen has no Delete button  ->  Delete is not shown for staff; Add is shown
-PASS  G93 Permissions - Staff can change their own password  ->  Change My Password is shown for staff
-PASS  G94 Permissions - Staff Billing screen has no Cancel Bill / Change Method  ->  Cancel Bill and Change Method hidden; Reopen Game shown
-PASS  G95 Logout - Staff logs out  ->  Login window is shown again
-95 passed, 0 failed  (results saved in docs/test-results/gui-click-test-results.tsv)
+PASS  G50 Expenses - Show deleted + Change History  ->  Deleted list shows 1 expense; history: "Changed 2026-11-23 17:26:32 by Club Owner. Before: RENT Rs. 1500.00 on 2026-11-23 (CASH) November rent"
+PASS  G51 Customers - Start Game: a new customer is added from the search box  ->  Phone pre-filled, only the name typed; pop-up: "Game started on Pool Table 2 Player: Kiran Rao Rate: ₹270 / hour"
+PASS  G52 Checkout - End Game: 10% Christmas discount, then Pay Later  ->  Message for 150%: "A percentage discount cannot be more than 100%."; MySQL: UNPAID, subtotal 270, discount 10% (Christmas) = Rs. 27.00, total Rs. 243.00, billed by Counter Staff (remembered)
+PASS  G53 Checkout - Billing > Checkout / Pay: Rs. 100 UPI + the rest in cash  ->  Remaining Rs. 143 after UPI 100, Complete Bill was off until paid; pop-up: "Payment of ₹243.00 received by SPLIT."; MySQL parts: UPI 100 + CASH 143; history shows Billed by Counter Staff
+PASS  G54 Bookings - Book a table (defaults: today 19:00, 1 hour)  ->  Pop-up: "Booking confirmed! C..."; MySQL has 1 booking
+PASS  G55 Bookings - Cancel the booking  ->  MySQL booking status = CANCELLED
+PASS  G56 Bookings - Book 19:00, then try 19:30 on the same table  ->  Pop-up: "Pool Table 1 already has a booking that overlaps 19:30 (1.0 h) on 2026-11-23."; MySQL still has only 1 confirmed booking (then cancelled)
+PASS  G57 Bookings - Priya books Pool Table 1 from now; Rahul tries to play there  ->  Pop-up: "Pool Table 1 is booked for Priya Nair from 17:26 to 18:26. Start the game for Priya Nair, or cancel the booking first."; no game started (booking cancelled afterwards)
+PASS  G58 Membership - Sell Membership while the Monthly price is not set  ->  Pop-up: "The price of the Monthly plan is not set yet. The owner sets it in Settings > Membership Plans."
+PASS  G59 Settings - Membership Plans: set the Monthly price to Rs. 500  ->  Pop-up: "Monthly plan: 1 month(s), ₹500, 5% off games. New sales use these values; memberships already sold do not change."
+PASS  G60 Membership - Sell Monthly to Kiran: Rs. 200 UPI + the rest in cash  ->  Dates shown: 23 Nov 2026  to  22 Dec 2026; pop-up: "Kiran Rao: Monthly member until 22 Dec 2026 (5% off) Paid ₹500.00 by SPLIT."; revenue +500
+PASS  G61 Customers - Start Game shows the chosen customer's membership  ->  Kiran Rao: "Monthly member until 22 Dec 2026  (5% off)"
+PASS  G62 Settings - Change Pool price for Men to Rs. 280  ->  MySQL: Pool / Men = Rs. 280.00
+PASS  G63 Settings - Change the price back to Rs. 270  ->  MySQL: Pool / Men = Rs. 270.00
+PASS  G64 Settings - Appearance: Midnight Blue, text size 16, Apply  ->  Pop-up: "Saved: Midnight Blue, text size 16. Close CUE 147 and start it again to see the new look."; saved theme = Midnight Blue, size = 16
+PASS  G65 Settings - Appearance: switch notifications OFF  ->  Top bar: "Notifications (off)"; pop-up: "Notifications are switched off. Turn them on in Settings > Appearance."
+PASS  G66 Settings - Appearance: switch notifications ON again  ->  Top bar: "Notifications (0)"
+PASS  G67 Settings - Club Settings: save the club name and phone  ->  Pop-up: "Club settings saved on this computer."; saved club name = CUE 147 Test Club
+PASS  G68 Settings - Staff List: add Ken, refuse a duplicate, switch Ken off  ->  Ken added; duplicate pop-up: "This name is already in the list."; Ken switched off
+PASS  G69 Settings - Food & Drinks Menu: add Cold Coffee (Rs. 80) and Chips (Rs. 30)  ->  MySQL menu: Cold Coffee Rs. 80, Chips Rs. 30; duplicate pop-up: "This item is already on the menu."
+PASS  G70 Billing - View / Print Bill: print the bill to a file  ->  Bill shows "CUE 147 TEST CLUB"; printed to docs/test-results/sample-bill-print.ps (4339 bytes, starts with %!PS)
+PASS  G71 Food & Drinks - During a game: Food & Drinks > 2 x Cold Coffee  ->  MySQL order of the game: Cold Coffee x2 (Rs. 160)
+PASS  G72 Food & Drinks - End Game: coffee is on the bill, add Chips at the checkout, Pay UPI  ->  Pop-up: "Payment of ₹410.00 received by UPI."; MySQL: food 190.00 (2 lines), total 410.00, UPI
+PASS  G73 Reports - Daily Report button  ->  Pop-up: "DAILY REPORT Revenue: ₹1,423.00 Games played: 3 Busiest table: Pool Table 1"
+PASS  G74 Reports - Monthly summary for this month  ->  Revenue card ₹1,423; 11 comparison rows; note "vs Oct 2026: new"
+PASS  G75 Reports - Charts tab  ->  2 charts shown
+PASS  G76 Reports - Export CSV  ->  Pop-up: "Saved 43 rows to: /Users/azeemmuhammed/CUE147/docs/test-results/sample-monthly-report.csv"; docs/test-results/sample-monthly-report.csv (1416 bytes)
+PASS  G77 Reports - Export PDF  ->  Pop-up: "The report for Nov 2026 was saved to: /Users/azeemmuhammed/CUE147/docs/test-results/sample-monthly-report.pdf"; docs/test-results/sample-monthly-report.pdf (1677 bytes)
+PASS  G78 Billing - Billed-by filter on the Billing screen  ->  4 bills billed by Counter Staff (all rows say so); Ken 0; All staff 4
+PASS  G79 Staff - Change My Password with a wrong current password  ->  Pop-up: "The current password is wrong."; owner123 still works
+PASS  G80 Staff - Change My Password (owner123 -> owner456)  ->  Pop-up: "Your password has been changed. Use the new password next time you log in."; owner456 logs in, owner123 refused (then changed back)
+PASS  G81 Right-click menu - Right-click a table card (Pool Table 2)  ->  Menu items: [Start Game, End Game, Food & Drinks, Cancel Game (started by mistake), Adjust Start Time, View Details]
+PASS  G82 Right-click menu - Right-click > View Details  ->  Pop-up: "Pool Table 2 Type: Pool Status: AVAILABLE Price (Men): ₹270 / hour Price (L..."
+PASS  G83 Right-click menu - Right-click > Start Game (Pool Table 2, Rahul Sharma)  ->  Card shows OCCUPIED; MySQL active sessions = 1
+PASS  G84 Corrections - Right-click > Adjust Start Time (20 minutes earlier)  ->  MySQL start time is 20 minutes ago; card timer shows about 00:20
+PASS  G85 Corrections - Right-click > Cancel Game (started by mistake)  ->  No new bill (4 bills before and after); Pool Table 2 is AVAILABLE again
+PASS  G86 Corrections - Reopen Game after an accidental End Game (bill not paid)  ->  Pop-up: "The game is running again on Pool Table 2. See the Tables screen."; MySQL: bill CUE20261123-0005 CANCELLED, Pool Table 2 ACTIVE again
+PASS  G87 Corrections - End the reopened game and pay  ->  New bill CUE20261123-0006 PAID (CASH); cancelled bills kept in history: 1
+PASS  G88 Auto refresh - Another counter starts a game (directly in MySQL)  ->  Card changed to OCCUPIED by itself after about 11 seconds (auto refresh every 15 seconds)
+PASS  G89 Dashboard - Notifications button  ->  Pop-up: "• No new notifications"
+PASS  G90 Navigation - Menu: Help > About Cue 147  ->  Pop-up: "CUE 147 - Snooker & Pool Club Management..."
+PASS  G91 Navigation - Toolbar button: New Customer  ->  Customers screen is shown
+PASS  G92 Customers - Delete a customer who has bills (Rahul Sharma)  ->  Pop-up: "Rahul Sharma has games, bookings or a membership, so the record is kept (the bills must stay). Nothing was deleted."; Rahul is still in MySQL
+PASS  G93 Backups - Settings > Backups: choose a folder, keep 3, Save  ->  Pop-up: "Backup settings saved on this computer."; folder gui-test-backups, keep 3
+PASS  G94 Backups - Backup Now  ->  Pop-up: "Backup saved: /Users/azeemmuhammed/CUE147/target/gui-test-backups/cue147-cue147_test-2026-11-23_17-28-12.sql (22 KB)"; last backup: 23 Nov 2026, 17:28 on Azeems-MacBook-Air.local (manual)
+PASS  G95 Backups - Restore from Backup (choose file, Yes, type RESTORE)  ->  Pop-up: "The data of cue147-cue147_test-2026-11-23_17-28-12.sql is back. CUE 147 now returns to the login screen."; counts before and after: customers=5 bills=7 payments=8 payment_parts=9 order_items=2 memberships=1 expenses=1
+PASS  G96 Backups - Log in again after the restore  ->  Logged in again as owner
+PASS  G97 Logout - Logout button, answer Yes  ->  Login window is shown again
+PASS  G98 Permissions - Login as Staff  ->  Main window opened for staff
+PASS  G99 Permissions - Staff sidebar has no Expenses, Reports or Settings  ->  Sidebar: [Dashboard, Tables, Customers, Bookings, Billing, Membership, Staff] (no Expenses, Reports, Settings); the Reports menu is greyed out
+PASS  G100 Permissions - Staff Tables screen has no Add / Remove / Maintenance  ->  Add, Edit, Remove, Maintenance buttons are not shown
+PASS  G101 Permissions - Staff runs a game and takes UPI payment  ->  MySQL: bill CUE20261123-0008 PAID (UPI); served by Counter Staff, received by Counter Staff
+PASS  G102 Permissions - Staff Customers screen has no Delete button  ->  Delete is not shown for staff; Add is shown
+PASS  G103 Permissions - Staff can change their own password  ->  Change My Password is shown for staff
+PASS  G104 Permissions - Staff Billing screen has no Cancel Bill / Change Method  ->  Cancel Bill and Change Method hidden; Reopen Game shown
+PASS  G105 Logout - Staff logs out  ->  Login window is shown again
+105 passed, 0 failed  (results saved in docs/test-results/gui-click-test-results.tsv)
 === Appearance test (a new program reads the saved look) ===
 PASS  The saved look is read back: Midnight Blue, text size 16
 PASS  After start-up the accent colour is Midnight Blue

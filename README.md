@@ -30,6 +30,17 @@ Developer scripts (macOS, local MySQL in `~/cue147-mysql`): `./setup-db.sh` (onc
 - The owner manages the **Billed by** names (Settings > Staff List), the **membership plan prices** (Settings > Membership Plans;
   a plan cannot be sold until its price is set) and the **menu** (Settings > Food & Drinks Menu).
 
+## Owner: reports, expenses and backups
+- **Reports:** choose a month and year. Revenue (table time, food & drinks, membership sales, minus discounts), expenses,
+  profit, Cash vs UPI, totals per Billed-by person and per discount occasion, compared with the month before.
+  Charts: the last 6 months and every day of the month. **Export CSV** (Excel) and **Export PDF**.
+- **Expenses** are never overwritten: an edit keeps the old values (**Change History**); **Delete** only hides an expense
+  (**Show deleted**) and it no longer counts in any total.
+- **Backups (Settings > Backups):** a backup of the whole database is made automatically once a day while CUE 147 is open
+  (folder and number of backups to keep are set per computer; default folder `CUE147 Backups` in the user's home).
+  **Backup Now** and **Restore from Backup...** (asks twice, and makes a safety backup first). A backup made on one computer
+  can be restored on another, e.g. to move the data to the club server.
+
 ## Database
 - **Settings** are not in the code. Each computer saves them in `.cue147/database.properties` in the user's home folder
   (Windows: `C:\Users\NAME\.cue147\`). Change them with **Database settings** on the login screen

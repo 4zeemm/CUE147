@@ -49,6 +49,14 @@ public class SettingsPanel extends ScreenPanel {
     private final JComboBox<String> itemCategory = Theme.combo("Coffee", "Beverages", "Snacks", "Food", "Other");
     private final JSpinner itemPrice = Theme.numberSpinner(0, 0, 100_000, 5);
 
+    // Backups tab (settings are saved per computer)
+    private final service.BackupService backupService = new service.BackupService();
+    private final JTextField backupFolder = Theme.field(28);
+    private final JSpinner backupKeep = Theme.styleSpinner(new JSpinner(new SpinnerNumberModel(14, 1, 365, 1)));
+    private final JCheckBox autoBackupBox = Theme.checkBox("Make a backup automatically once a day");
+    private final JLabel lastBackupLabel = Theme.label("-", Theme.BOLD, Theme.TEXT);
+    private final JLabel folderInfoLabel = Theme.label("-", Theme.SMALL, Theme.MUTED);
+
     private final PriceDAO priceDAO = new PriceDAO();
     private final BillingCalculator calculator = new BillingCalculator();
 
@@ -91,6 +99,7 @@ public class SettingsPanel extends ScreenPanel {
         tabs.addTab("Staff List", staffTab());
         tabs.addTab("Membership Plans", plansTab());
         tabs.addTab("Food & Drinks Menu", menuTab());
+        tabs.addTab("Backups", backupTab());
         add(tabs, BorderLayout.CENTER);
         loadClubValues();
         loadAppearance();
@@ -338,6 +347,7 @@ public class SettingsPanel extends ScreenPanel {
 
     @Override
     public void refresh() {
+        loadBackupInfo();
         loadStaff();
         loadPlans();
         loadMenu();
@@ -575,5 +585,124 @@ public class SettingsPanel extends ScreenPanel {
         } catch (SQLException e) {
             showDbError(e);
         }
+    }
+
+    // ---------------- Backups (whole database to .sql files; see BackupService) ----------------
+
+    private JPanel backupTab() {
+        backupFolder.setName("backupFolder");
+        backupKeep.setName("backupKeep");
+        JPanel folderRow = Theme.panel(new BorderLayout(6, 0));
+        folderRow.add(backupFolder, BorderLayout.CENTER);
+        folderRow.add(Theme.button("Choose...", Theme.NEUTRAL, e -> chooseBackupFolder()), BorderLayout.EAST);
+        JPanel form = Theme.panel(new GridBagLayout());
+        Theme.addRow(form, 0, "Backup folder", folderRow);
+        Theme.addRow(form, 1, "Keep the newest", backupKeep);
+        Theme.addRow(form, 2, "", autoBackupBox);
+        Theme.addRow(form, 3, "Last successful backup", lastBackupLabel);
+        Theme.addRow(form, 4, "", folderInfoLabel);
+        Theme.addRow(form, 5, "", Theme.label("<html>The automatic backup runs while CUE 147 is open on this computer. "
+                + "Also copy the folder to a USB drive or cloud storage now and then.</html>", Theme.SMALL, Theme.MUTED));
+        return tab(form,
+                Theme.button("Save Backup Settings", Theme.GREEN, e -> saveBackupSettings()),
+                Theme.button("Backup Now", Theme.BLUE, e -> backupNow()),
+                Theme.button("Restore from Backup...", Theme.RED, e -> restoreBackup()));
+    }
+
+    private void loadBackupInfo() {
+        backupFolder.setText(AppSettings.getBackupFolder());
+        backupKeep.setValue(AppSettings.getBackupKeep());
+        autoBackupBox.setSelected(AppSettings.isAutoBackup());
+        showBackupStatus();
+    }
+
+    private void showBackupStatus() {
+        try {
+            lastBackupLabel.setText(backupService.lastSuccessfulBackup());
+        } catch (SQLException e) {
+            lastBackupLabel.setText("-");
+        }
+        List<java.io.File> files = backupService.listBackups();
+        folderInfoLabel.setText(files.isEmpty() ? "No backups in this folder yet."
+                : files.size() + " backup(s) in this folder, newest: " + files.get(files.size() - 1).getName());
+    }
+
+    private void chooseBackupFolder() {
+        JFileChooser chooser = new JFileChooser(backupFolder.getText());
+        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        chooser.setDialogTitle("Choose the backup folder");
+        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) backupFolder.setText(chooser.getSelectedFile().getAbsolutePath());
+    }
+
+    private void saveBackupSettings() {
+        String folder = backupFolder.getText().trim();
+        if (folder.isEmpty()) { Theme.error(this, "Choose a backup folder."); return; }
+        java.io.File dir = new java.io.File(folder);
+        if (!dir.isDirectory() && !dir.mkdirs()) { Theme.error(this, "The folder cannot be created:\n" + folder); return; }
+        if (!dir.canWrite()) { Theme.error(this, "CUE 147 cannot write into this folder:\n" + folder); return; }
+        AppSettings.setBackupFolder(dir.getAbsolutePath());
+        AppSettings.setBackupKeep(((Number) backupKeep.getValue()).intValue());
+        AppSettings.setAutoBackup(autoBackupBox.isSelected());
+        showBackupStatus();
+        frame.setStatus("Backup settings saved");
+        Theme.info(this, "Backup settings saved on this computer.", "Backups");
+    }
+
+    /** Runs a backup in the background (the window stays usable) and tells the result. */
+    private void backupNow() {
+        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+        frame.setStatus("Making a backup...");
+        new SwingWorker<java.io.File, Void>() {
+            @Override protected java.io.File doInBackground() throws Exception { return backupService.backupNow("MANUAL"); }
+            @Override protected void done() {
+                setCursor(Cursor.getDefaultCursor());
+                try {
+                    java.io.File f = get();
+                    showBackupStatus();
+                    frame.setStatus("Backup saved");
+                    Theme.info(SettingsPanel.this, "Backup saved:\n" + f.getAbsolutePath() + "\n(" + (f.length() / 1024 + 1) + " KB)", "Backup Now");
+                } catch (Exception e) {
+                    Throwable cause = e.getCause() == null ? e : e.getCause();
+                    util.AppLogger.error("Backup failed", cause);
+                    Theme.error(SettingsPanel.this, "The backup failed:\n" + cause.getMessage());
+                }
+            }
+        }.execute();
+    }
+
+    /** Replaces ALL data with a backup - only after two clear confirmations. */
+    private void restoreBackup() {
+        JFileChooser chooser = new JFileChooser(AppSettings.getBackupFolder());
+        chooser.setDialogTitle("Choose the backup to restore");
+        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("CUE 147 backups (*.sql)", "sql"));
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
+        java.io.File file = chooser.getSelectedFile();
+        if (!Theme.confirm(this, "Restore " + file.getName() + "?\n\nALL current data (games, bills, customers, expenses...) will be REPLACED\n"
+                + "by the data in this backup. A safety backup of the current data is made first.\n\n"
+                + "Make sure nobody else is using CUE 147 right now.", "Restore from Backup")) return;
+        String typed = JOptionPane.showInputDialog(this, "Type RESTORE to replace all data with the backup:", "Restore from Backup", JOptionPane.WARNING_MESSAGE);
+        if (typed == null || !typed.trim().equals("RESTORE")) {
+            Theme.info(this, "Nothing was restored.", "Restore from Backup");
+            return;
+        }
+        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+        frame.setStatus("Restoring...");
+        new SwingWorker<Void, Void>() {
+            @Override protected Void doInBackground() throws Exception { backupService.restore(file); return null; }
+            @Override protected void done() {
+                setCursor(Cursor.getDefaultCursor());
+                try {
+                    get();
+                    Theme.info(SettingsPanel.this, "The data of " + file.getName() + " is back.\nCUE 147 now returns to the login screen.", "Restore Finished");
+                    frame.dispose();
+                    new LoginFrame().setVisible(true);
+                } catch (Exception e) {
+                    Throwable cause = e.getCause() == null ? e : e.getCause();
+                    util.AppLogger.error("Restore failed", cause);
+                    Theme.error(SettingsPanel.this, "The restore failed:\n" + cause.getMessage()
+                            + "\n\nThe safety backup made just before is in the backup folder.");
+                }
+            }
+        }.execute();
     }
 }

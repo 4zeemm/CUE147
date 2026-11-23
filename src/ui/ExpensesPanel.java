@@ -17,7 +17,10 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Screen (owner only) - record and view club expenses. Expenses are never deleted. */
+/**
+ * Screen (owner only) - record and view club expenses.
+ * Old records are never overwritten: edits keep the old values (Change History), "Delete" only hides an expense.
+ */
 public class ExpensesPanel extends ScreenPanel {
     private final ExpenseDAO expenseDAO = new ExpenseDAO();
     private final DefaultTableModel model = Theme.tableModel("Date", "Category", "Amount", "Method", "Description", "Recorded by");
@@ -31,6 +34,7 @@ public class ExpensesPanel extends ScreenPanel {
     private final JRadioButton upiRadio = Theme.radio("UPI");
     private final JTextArea descriptionArea = new JTextArea(3, 20);
     private final JLabel totalLabel = Theme.label("", Theme.HEADING, Theme.GOLD);
+    private final JCheckBox showDeletedBox = Theme.checkBox("Show deleted");
 
     public ExpensesPanel(MainFrame frame) {
         super(frame);
@@ -45,7 +49,14 @@ public class ExpensesPanel extends ScreenPanel {
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         JPanel left = Theme.panel(new BorderLayout(0, 8));
         left.add(Theme.scroll(table), BorderLayout.CENTER);
-        left.add(totalLabel, BorderLayout.SOUTH);
+        JPanel south = Theme.panel(new BorderLayout());
+        south.add(totalLabel, BorderLayout.WEST);
+        JPanel extra = Theme.panel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        extra.add(showDeletedBox);
+        extra.add(Theme.button("Change History", Theme.NEUTRAL, e -> showChanges()));
+        south.add(extra, BorderLayout.EAST);
+        left.add(south, BorderLayout.SOUTH);
+        showDeletedBox.addActionListener(e -> refresh());
 
         JPanel centre = Theme.panel(new BorderLayout(16, 0));
         centre.add(buildForm(), BorderLayout.WEST);
@@ -96,7 +107,7 @@ public class ExpensesPanel extends ScreenPanel {
     public void refresh() {
         try {
             shown.clear();
-            shown.addAll(expenseDAO.findAll());
+            shown.addAll(showDeletedBox.isSelected() ? expenseDAO.findDeleted() : expenseDAO.findAll());
             model.setRowCount(0);
             for (Expense e : shown) {
                 model.addRow(new Object[]{e.getDate(), e.getCategory(), Theme.money(e.getAmount()), e.getPaymentMethod(),
@@ -136,6 +147,7 @@ public class ExpensesPanel extends ScreenPanel {
             Theme.error(this, "Only the owner can edit expenses.");
             return;
         }
+        if (showDeletedBox.isSelected()) { Theme.error(this, "A deleted expense cannot be edited. Untick \"Show deleted\"."); return; }
         int row = table.getSelectedRow();
         if (row < 0 || row >= shown.size()) {
             Theme.error(this, "Select an expense in the table first.");
@@ -179,7 +191,7 @@ public class ExpensesPanel extends ScreenPanel {
                 Validator.requireNotFuture(date);
                 Expense changed = new Expense(old.getId(), (String) categoryEdit.getSelectedItem(), amount, date,
                         descriptionEdit.getText().trim(), cashEdit.isSelected() ? "CASH" : "UPI");
-                boolean saved = expenseDAO.update(changed);       // UPDATE ... WHERE expense_id = ?
+                boolean saved = expenseDAO.update(changed, frame.getUser().getId());   // old values are kept in expense_changes
                 dialog.dispose();
                 refresh();
                 if (saved) frame.setStatus("Expense updated");
@@ -207,6 +219,7 @@ public class ExpensesPanel extends ScreenPanel {
             Theme.error(this, "Only the owner can delete expenses.");
             return;
         }
+        if (showDeletedBox.isSelected()) { Theme.error(this, "This list shows expenses that are already deleted."); return; }
         int row = table.getSelectedRow();
         if (row < 0 || row >= shown.size()) {
             Theme.error(this, "Select an expense in the table first.");
@@ -219,7 +232,7 @@ public class ExpensesPanel extends ScreenPanel {
                 "Delete Expense", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, null, choices, choices[1]);
         if (answer != 0) return;            // Cancel (or closing the window): nothing is deleted
         try {
-            boolean deleted = expenseDAO.delete(expense.getId());   // delete by id, not by row position
+            boolean deleted = expenseDAO.delete(expense.getId(), frame.getUser().getId());   // by id; the row is kept as DELETED
             refresh();                                              // the list and the totals are reloaded
             if (deleted) {
                 AppLogger.info("Expense " + expense.getId() + " deleted by " + frame.getUser().getUsername());
@@ -227,6 +240,18 @@ public class ExpensesPanel extends ScreenPanel {
             } else {
                 Theme.info(this, "This expense was already deleted.", "Delete Expense");
             }
+        } catch (SQLException e) {
+            showDbError(e);
+        }
+    }
+
+    /** Shows the earlier versions of the selected expense (saved every time it was edited). */
+    private void showChanges() {
+        int row = table.getSelectedRow();
+        if (row < 0 || row >= shown.size()) { Theme.error(this, "Select an expense in the table first."); return; }
+        try {
+            List<String> changes = expenseDAO.findChanges(shown.get(row).getId());
+            Theme.info(this, changes.isEmpty() ? "This expense was never changed." : String.join("\n", changes), "Change History");
         } catch (SQLException e) {
             showDbError(e);
         }

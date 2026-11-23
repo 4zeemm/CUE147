@@ -7,6 +7,7 @@ import java.awt.*;
 /** A small dashboard card: a coloured value on top of a grey title. */
 public class StatCard extends RoundedPanel {
     private final JLabel valueLabel;
+    private final JLabel noteLabel = Theme.label(" ", Theme.SMALL, Theme.MUTED);
 
     public StatCard(String title, String value, Color accent) {
         super(new BorderLayout(0, 6));
@@ -21,7 +22,11 @@ public class StatCard extends RoundedPanel {
         top.add(titleLabel, BorderLayout.CENTER);
         add(top, BorderLayout.NORTH);
         add(valueLabel, BorderLayout.CENTER);
+        add(noteLabel, BorderLayout.SOUTH);
     }
 
     public void setValue(String value) { valueLabel.setText(value); }
+
+    /** Small grey line under the value, e.g. "vs Oct 2026: +12.5%". */
+    public void setNote(String note) { noteLabel.setText(note); }
 }

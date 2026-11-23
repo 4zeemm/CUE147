@@ -29,6 +29,7 @@ public class AppearanceTest {
         check("After start-up the accent colour is Midnight Blue", Theme.ACCENT.equals(Theme.accentFor("Midnight Blue")));
         check("After start-up the text is bigger (body 16, title 30)", Theme.BODY.getSize() == 16 && Theme.TITLE.getSize() == 30);
 
+        AppSettings.setAutoBackup(false);   // tests never write automatic backups
         User owner = new AuthService().login("owner", "owner123");
         MainFrame[] frame = new MainFrame[1];
         SwingUtilities.invokeAndWait(() -> { frame[0] = new MainFrame(owner); frame[0].setVisible(true); });

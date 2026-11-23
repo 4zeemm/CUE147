@@ -45,6 +45,7 @@ public class MainFrame extends JFrame {
     private CustomersPanel customers;
     private ReportsPanel reports;
     private int secondsCounter;
+    private Timer clock;
 
     public MainFrame(User user) {
         super("CUE 147 - Snooker & Pool Club");
@@ -143,6 +144,23 @@ public class MainFrame extends JFrame {
         if (weekly) reports.showWeekly(); else reports.showDaily();
     }
 
+    /** The daily automatic backup runs on a background thread, so the counter never waits for it. */
+    private void startAutomaticBackup() {
+        Thread t = new Thread(() -> {
+            String problem = new service.BackupService().automaticBackupIfDue();
+            if (problem != null) SwingUtilities.invokeLater(() -> setStatus(problem + " (see Settings > Backups)"));
+        }, "cue147-automatic-backup");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /** Closing this window also stops its timer (clock, auto refresh, automatic backup). */
+    @Override
+    public void dispose() {
+        if (clock != null) clock.stop();
+        super.dispose();
+    }
+
     public void logout() {
         if (Theme.confirm(this, "Do you want to log out, " + user.getFullName() + "?", "Logout")) {
             dispose();
@@ -193,14 +211,15 @@ public class MainFrame extends JFrame {
         DateTimeFormatter f = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy  |  HH:mm:ss");
         clockLabel.setText(LocalDateTime.now().format(f));
         // A Swing Timer fires an ActionEvent every 1000 ms on the Event Dispatch Thread.
-        Timer timer = new Timer(1000, e -> {
+        clock = new Timer(1000, e -> {
             clockLabel.setText(LocalDateTime.now().format(f));
             screens.get(current).tick();          // the visible screen updates its running timers
             secondsCounter++;
             if (secondsCounter % 15 == 0) screens.get(current).autoRefresh();   // keeps two counters in step
             if (secondsCounter % 30 == 0) refreshNotifications();
+            if (secondsCounter % 1800 == 10) startAutomaticBackup();   // 10 s after login, then every 30 minutes
         });
-        timer.start();
+        clock.start();
     }
 
     // ---------------- building the pieces ----------------

@@ -42,9 +42,10 @@ public class BillDAO {
         bill.setCorrectionDetails(rs.getString("status"), rs.getString("cancel_reason"));
         bill.setStaffDetails(rs.getString("served_by"), rs.getString("received_by_name"));
         int staffId = rs.getInt("billed_by_staff_id");
+        Integer billedByStaffId = rs.wasNull() ? null : staffId;   // wasNull() must come straight after getInt()
         bill.setCheckoutDetails(rs.getBigDecimal("table_amount"), rs.getString("bill_discount_type"),
                 rs.getBigDecimal("bill_discount_value"), rs.getBigDecimal("bill_discount_amount"), rs.getString("discount_occasion"),
-                rs.wasNull() ? null : staffId, rs.getString("billed_by_name"));
+                billedByStaffId, rs.getString("billed_by_name"));
         bill.setItemsAmount(rs.getBigDecimal("items_amount"));
         return bill;
     }
@@ -190,14 +191,19 @@ public class BillDAO {
     }
 
     /** Bill history, newest first. The search text matches the customer name or the bill number. */
-    public List<Bill> search(String text, boolean unpaidOnly) throws SQLException {
+    public List<Bill> search(String text, boolean unpaidOnly) throws SQLException { return search(text, unpaidOnly, null); }
+
+    /** Same, but only the bills of one "Billed by" person when staffId is not null. */
+    public List<Bill> search(String text, boolean unpaidOnly, Integer staffId) throws SQLException {
         List<Bill> list = new ArrayList<>();
         String sql = SELECT_BILL + "WHERE (c.name LIKE ? OR b.bill_number LIKE ?) "
-                + (unpaidOnly ? "AND p.status = 'PENDING' AND b.status = 'ACTIVE' " : "") + "ORDER BY b.created_at DESC, b.bill_id DESC";
+                + (unpaidOnly ? "AND p.status = 'PENDING' AND b.status = 'ACTIVE' " : "")
+                + (staffId != null ? "AND b.billed_by_staff_id = ? " : "") + "ORDER BY b.created_at DESC, b.bill_id DESC";
         try (Connection con = DBConnection.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, "%" + text + "%");
             ps.setString(2, "%" + text + "%");
+            if (staffId != null) ps.setInt(3, staffId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) list.add(readBill(rs));
             }
