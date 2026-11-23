@@ -7,3 +7,6 @@ backups/
 cue147.properties
 .DS_Store
 hs_err_pid*.log
+# college-project documents with students' names - kept on this computer only
+docs/CUE147_Final_Review_Presentation.pptx
+docs/CUE147_Submission_Report.docx
