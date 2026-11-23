@@ -2,6 +2,7 @@ package dao;
 
 import database.DBConnection;
 import model.Bill;
+import model.PaymentPart;
 
 import java.math.BigDecimal;
 import java.sql.*;
@@ -17,14 +18,15 @@ public class BillDAO {
     private static final String SELECT_BILL =
             "SELECT b.*, s.start_time, COALESCE(s.end_time, b.created_at) AS end_time, c.name AS customer_name, t.table_name, "
             + "p.status AS pay_status, p.method AS pay_method, p.paid_at, "
-            + "ue.full_name AS served_by, ur.full_name AS received_by_name "
+            + "ue.full_name AS served_by, ur.full_name AS received_by_name, sm.name AS billed_by_name "
             + "FROM bills b "
             + "JOIN sessions s ON s.session_id = b.session_id "
             + "JOIN customers c ON c.customer_id = s.customer_id "
             + "JOIN game_tables t ON t.table_id = s.table_id "
             + "JOIN payments p ON p.bill_id = b.bill_id "
             + "LEFT JOIN users ue ON ue.user_id = s.ended_by "
-            + "LEFT JOIN users ur ON ur.user_id = p.received_by ";
+            + "LEFT JOIN users ur ON ur.user_id = p.received_by "
+            + "LEFT JOIN staff_members sm ON sm.staff_id = b.billed_by_staff_id ";
 
     private Bill readBill(ResultSet rs) throws SQLException {
         Bill bill = new Bill(rs.getInt("bill_id"), rs.getString("bill_number"), rs.getInt("session_id"),
@@ -38,6 +40,10 @@ public class BillDAO {
                 paidAt == null ? null : paidAt.toLocalDateTime());
         bill.setCorrectionDetails(rs.getString("status"), rs.getString("cancel_reason"));
         bill.setStaffDetails(rs.getString("served_by"), rs.getString("received_by_name"));
+        int staffId = rs.getInt("billed_by_staff_id");
+        bill.setCheckoutDetails(rs.getBigDecimal("table_amount"), rs.getString("bill_discount_type"),
+                rs.getBigDecimal("bill_discount_value"), rs.getBigDecimal("bill_discount_amount"), rs.getString("discount_occasion"),
+                rs.wasNull() ? null : staffId, rs.getString("billed_by_name"));
         return bill;
     }
 
@@ -45,9 +51,125 @@ public class BillDAO {
         try (Connection con = DBConnection.getConnection();
              PreparedStatement ps = con.prepareStatement(SELECT_BILL + "WHERE b.bill_id = ?")) {
             ps.setInt(1, billId);
+            Bill bill;
             try (ResultSet rs = ps.executeQuery()) {
-                return rs.next() ? readBill(rs) : null;
+                if (!rs.next()) return null;
+                bill = readBill(rs);
             }
+            bill.setPaymentParts(findParts(con, billId));
+            return bill;
+        }
+    }
+
+    /** The parts of the payment of one bill (one part, or several for a split payment). */
+    private List<PaymentPart> findParts(Connection con, int billId) throws SQLException {
+        List<PaymentPart> parts = new ArrayList<>();
+        try (PreparedStatement ps = con.prepareStatement("SELECT pp.method, pp.amount FROM payment_parts pp "
+                + "JOIN payments p ON p.payment_id = pp.payment_id WHERE p.bill_id = ? ORDER BY pp.part_id")) {
+            ps.setInt(1, billId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) parts.add(new PaymentPart(rs.getString(1), rs.getBigDecimal(2)));
+            }
+        }
+        return parts;
+    }
+
+    /**
+     * Closes a bill at the checkout, all in ONE transaction:
+     * the discount, final total and "Billed by" are saved on the bill, the payment becomes PAID,
+     * every part (Cash / UPI) is saved separately, and the customer's total spending goes up.
+     * Throws "Bill is already paid" when another computer paid it first.
+     */
+    public void completeCheckout(int billId, String discountType, BigDecimal discountValue, BigDecimal discountAmount,
+                                 String occasion, BigDecimal finalAmount, String methodLabel, List<PaymentPart> parts,
+                                 int billedByStaffId, int receivedBy) throws SQLException {
+        try (Connection con = DBConnection.getConnection()) {
+            con.setAutoCommit(false);
+            try {
+                int paymentId, customerId;
+                try (PreparedStatement ps = con.prepareStatement(
+                        "SELECT p.payment_id, s.customer_id FROM payments p JOIN bills b ON b.bill_id = p.bill_id "
+                        + "JOIN sessions s ON s.session_id = b.session_id "
+                        + "WHERE p.bill_id = ? AND p.status = 'PENDING' AND b.status = 'ACTIVE' FOR UPDATE")) {
+                    ps.setInt(1, billId);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        if (!rs.next()) throw new SQLException("Bill is already paid or cancelled");
+                        paymentId = rs.getInt(1);
+                        customerId = rs.getInt(2);
+                    }
+                }
+                updateBillCheckout(con, billId, discountType, discountValue, discountAmount, occasion, finalAmount, billedByStaffId);
+                Timestamp now = new Timestamp(System.currentTimeMillis());
+                try (PreparedStatement ps = con.prepareStatement(
+                        "UPDATE payments SET amount = ?, method = ?, status = 'PAID', paid_at = ?, received_by = ? WHERE payment_id = ?")) {
+                    ps.setBigDecimal(1, finalAmount);
+                    ps.setString(2, methodLabel);
+                    ps.setTimestamp(3, now);
+                    ps.setInt(4, receivedBy);
+                    ps.setInt(5, paymentId);
+                    ps.executeUpdate();
+                }
+                insertParts(con, paymentId, parts, now);
+                try (PreparedStatement ps = con.prepareStatement(
+                        "UPDATE customers SET total_spent = total_spent + ? WHERE customer_id = ?")) {
+                    ps.setBigDecimal(1, finalAmount);
+                    ps.setInt(2, customerId);
+                    ps.executeUpdate();
+                }
+                con.commit();
+            } catch (SQLException e) {
+                con.rollback();
+                throw e;
+            }
+        }
+    }
+
+    /** "Pay later": keeps the bill UNPAID but saves its discount, total and "Billed by". */
+    public void saveForLater(int billId, String discountType, BigDecimal discountValue, BigDecimal discountAmount,
+                             String occasion, BigDecimal finalAmount, int billedByStaffId) throws SQLException {
+        try (Connection con = DBConnection.getConnection()) {
+            con.setAutoCommit(false);
+            try {
+                try (PreparedStatement ps = con.prepareStatement(
+                        "UPDATE payments SET amount = ? WHERE bill_id = ? AND status = 'PENDING'")) {
+                    ps.setBigDecimal(1, finalAmount);
+                    ps.setInt(2, billId);
+                    if (ps.executeUpdate() != 1) throw new SQLException("Bill is already paid or cancelled");
+                }
+                updateBillCheckout(con, billId, discountType, discountValue, discountAmount, occasion, finalAmount, billedByStaffId);
+                con.commit();
+            } catch (SQLException e) {
+                con.rollback();
+                throw e;
+            }
+        }
+    }
+
+    private void updateBillCheckout(Connection con, int billId, String discountType, BigDecimal discountValue, BigDecimal discountAmount,
+                                    String occasion, BigDecimal finalAmount, int billedByStaffId) throws SQLException {
+        try (PreparedStatement ps = con.prepareStatement("UPDATE bills SET bill_discount_type = ?, bill_discount_value = ?, "
+                + "bill_discount_amount = ?, discount_occasion = ?, final_amount = ?, billed_by_staff_id = ? WHERE bill_id = ? AND status = 'ACTIVE'")) {
+            ps.setString(1, discountType);
+            ps.setBigDecimal(2, discountValue);
+            ps.setBigDecimal(3, discountAmount);
+            ps.setString(4, occasion == null || occasion.isEmpty() ? null : occasion);
+            ps.setBigDecimal(5, finalAmount);
+            ps.setInt(6, billedByStaffId);
+            ps.setInt(7, billId);
+            if (ps.executeUpdate() != 1) throw new SQLException("Bill is already paid or cancelled");
+        }
+    }
+
+    private void insertParts(Connection con, int paymentId, List<PaymentPart> parts, Timestamp paidAt) throws SQLException {
+        try (PreparedStatement ps = con.prepareStatement("INSERT INTO payment_parts (payment_id, method, amount, paid_at) VALUES (?, ?, ?, ?)")) {
+            for (PaymentPart part : parts) {
+                ps.setInt(1, paymentId);
+                ps.setString(2, part.getMethod());
+                ps.setBigDecimal(3, part.getAmount());
+                ps.setTimestamp(4, paidAt);
+                ps.addBatch();
+            }
+            ps.executeBatch();
         }
     }
 
@@ -89,8 +211,9 @@ public class BillDAO {
             con.setAutoCommit(false);
             try {
                 BigDecimal amount;
+                int paymentId;
                 try (PreparedStatement ps = con.prepareStatement(
-                        "SELECT p.amount, s.customer_id FROM payments p JOIN bills b ON b.bill_id = p.bill_id "
+                        "SELECT p.amount, s.customer_id, p.payment_id FROM payments p JOIN bills b ON b.bill_id = p.bill_id "
                         + "JOIN sessions s ON s.session_id = b.session_id "
                         + "WHERE p.bill_id = ? AND p.status = 'PENDING' AND b.status = 'ACTIVE'")) {
                     ps.setInt(1, billId);
@@ -99,15 +222,18 @@ public class BillDAO {
                         if (!rs.next()) throw new SQLException("Bill is already paid");
                         amount = rs.getBigDecimal(1);
                         customerId = rs.getInt(2);
+                        paymentId = rs.getInt(3);
                     }
+                    Timestamp now = new Timestamp(System.currentTimeMillis());
                     try (PreparedStatement update = con.prepareStatement(
                             "UPDATE payments SET status = 'PAID', method = ?, paid_at = ?, received_by = ? WHERE bill_id = ?")) {
                         update.setString(1, method);
-                        update.setTimestamp(2, new Timestamp(System.currentTimeMillis()));
+                        update.setTimestamp(2, now);
                         update.setInt(3, receivedBy);
                         update.setInt(4, billId);
                         update.executeUpdate();
                     }
+                    if (amount.signum() > 0) insertParts(con, paymentId, List.of(new PaymentPart(method, amount)), now);
                     try (PreparedStatement update = con.prepareStatement(
                             "UPDATE customers SET total_spent = total_spent + ? WHERE customer_id = ?")) {
                         update.setBigDecimal(1, amount);
@@ -176,13 +302,33 @@ public class BillDAO {
         }
     }
 
-    /** Corrects the payment method (CASH or UPI) of a bill that was already PAID. Returns false if nothing changed. */
+    /**
+     * Corrects the payment method (CASH or UPI) of a bill that was PAID with ONE method.
+     * The payment and its single part are changed together. Returns false if nothing changed.
+     */
     public boolean changePaymentMethod(int billId, String newMethod) throws SQLException {
-        try (Connection con = DBConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement("UPDATE payments SET method = ? WHERE bill_id = ? AND status = 'PAID'")) {
-            ps.setString(1, newMethod);
-            ps.setInt(2, billId);
-            return ps.executeUpdate() == 1;
+        try (Connection con = DBConnection.getConnection()) {
+            con.setAutoCommit(false);
+            try {
+                int changed;
+                try (PreparedStatement ps = con.prepareStatement(
+                        "UPDATE payments SET method = ? WHERE bill_id = ? AND status = 'PAID' AND method IN ('CASH','UPI')")) {
+                    ps.setString(1, newMethod);
+                    ps.setInt(2, billId);
+                    changed = ps.executeUpdate();
+                }
+                try (PreparedStatement ps = con.prepareStatement("UPDATE payment_parts pp JOIN payments p ON p.payment_id = pp.payment_id "
+                        + "SET pp.method = ? WHERE p.bill_id = ?")) {
+                    ps.setString(1, newMethod);
+                    ps.setInt(2, billId);
+                    ps.executeUpdate();
+                }
+                con.commit();
+                return changed == 1;
+            } catch (SQLException e) {
+                con.rollback();
+                throw e;
+            }
         }
     }
 

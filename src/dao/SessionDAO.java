@@ -96,8 +96,8 @@ public class SessionDAO {
                 String billNumber = nextBillNumber(con, endTime.toLocalDate());
                 int billId;
                 try (PreparedStatement ps = con.prepareStatement(
-                        "INSERT INTO bills (bill_number, session_id, billed_minutes, hourly_rate, subtotal, discount_percent, final_amount, created_at) "
-                        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?)", Statement.RETURN_GENERATED_KEYS)) {
+                        "INSERT INTO bills (bill_number, session_id, billed_minutes, hourly_rate, subtotal, discount_percent, final_amount, created_at, table_amount) "
+                        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", Statement.RETURN_GENERATED_KEYS)) {
                     ps.setString(1, billNumber);
                     ps.setInt(2, sessionId);
                     ps.setInt(3, billedMinutes);
@@ -106,6 +106,7 @@ public class SessionDAO {
                     ps.setBigDecimal(6, discountPercent);
                     ps.setBigDecimal(7, finalAmount);
                     ps.setTimestamp(8, Timestamp.valueOf(endTime));
+                    ps.setBigDecimal(9, finalAmount);   // table time; extras and the bill discount are added at checkout
                     ps.executeUpdate();
                     try (ResultSet keys = ps.getGeneratedKeys()) {
                         keys.next();

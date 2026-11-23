@@ -21,7 +21,7 @@ public class BillingPanel extends ScreenPanel {
     private final BillDAO billDAO = new BillDAO();
     private final BillService billService = new BillService();
     private final SessionService sessionService = new SessionService();
-    private final DefaultTableModel model = Theme.tableModel("Bill No", "Date", "Customer", "Table", "Duration", "Amount", "Payment", "Method");
+    private final DefaultTableModel model = Theme.tableModel("Bill No", "Date", "Customer", "Table", "Duration", "Amount", "Payment", "Method", "Billed by");
     private final JTable table = new JTable(model);
     private final List<Bill> shown = new ArrayList<>();
 
@@ -55,7 +55,8 @@ public class BillingPanel extends ScreenPanel {
         // (The data stays in the model, so "Export CSV" still saves every column.)
         table.removeColumn(table.getColumnModel().getColumn(7));   // Method
         table.removeColumn(table.getColumnModel().getColumn(4));   // Duration
-        int[] widths = {165, 75, 115, 115, 80, 75};
+        table.removeColumn(table.getColumnModel().getColumn(1));   // Date (the bill number contains the date)
+        int[] widths = {165, 110, 110, 85, 75, 90};
         for (int i = 0; i < widths.length; i++) table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
         searchField.addActionListener(e -> refresh());
         unpaidBox.addActionListener(e -> refresh());
@@ -83,14 +84,14 @@ public class BillingPanel extends ScreenPanel {
         Theme.addRow(info, 7, "Discount", discountLabel);
         Theme.addRow(info, 8, "TOTAL", totalLabel);
         Theme.addRow(info, 9, "Payment", statusLabel);
-        Theme.addRow(info, 10, "Handled by", staffLabel);
+        Theme.addRow(info, 10, "Billed by", staffLabel);
         JPanel wrap = Theme.panel(new BorderLayout());
         wrap.add(info, BorderLayout.NORTH);
         card.add(wrap, BorderLayout.CENTER);
 
         JPanel row1 = Theme.panel(new GridLayout(1, 2, 8, 0));
-        row1.add(Theme.button("Record Payment", Theme.GREEN, e -> openBill()));
-        row1.add(Theme.button("View / Print Bill", Theme.BLUE, e -> openBill()));
+        row1.add(Theme.button("Checkout / Pay", Theme.GREEN, e -> openCheckout()));
+        row1.add(Theme.button("View / Print Bill", Theme.BLUE, e -> viewBill()));
         // corrections: everybody may reopen a game, only the owner may cancel / refund or change a payment method
         boolean owner = frame.getUser().canCorrectFinancialRecords();
         JPanel row2 = Theme.panel(new GridLayout(1, owner ? 3 : 1, 8, 0));
@@ -126,7 +127,7 @@ public class BillingPanel extends ScreenPanel {
         for (Bill b : shown) {
             model.addRow(new Object[]{b.getBillNumber(), b.getCreatedAt().format(f), b.getCustomerName(), b.getTableName(),
                     b.getDurationText(), Theme.money(b.getFinalAmount()), b.getPaymentLabel(),
-                    b.getPaymentMethod()});
+                    b.getPaymentMethod(), b.getBilledBy()});
         }
         showSelected();
         frame.setStatus(shown.size() + " bill(s) found");
@@ -151,13 +152,15 @@ public class BillingPanel extends ScreenPanel {
         timeLabel.setText(b.getStartTime().format(t) + " - " + b.getEndTime().format(t));
         durationLabel.setText(b.getDurationText());
         rateLabel.setText(Theme.money0(b.getHourlyRate()) + " / hour");
-        subtotalLabel.setText(Theme.money(b.getSubtotal()));
-        discountLabel.setText(b.getDiscountPercent().signum() > 0 ? b.getDiscountPercent() + "% member discount" : "none");
+        subtotalLabel.setText(Theme.money(b.getChargesSubtotal()));
+        String discount = b.getDiscountLabel().isEmpty() ? "" : "- " + Theme.money(b.getBillDiscountAmount()) + "  " + b.getDiscountLabel();
+        if (b.getDiscountPercent().signum() > 0) discount = (discount.isEmpty() ? "" : discount + ", ") + "member " + b.getDiscountPercent().stripTrailingZeros().toPlainString() + "%";
+        discountLabel.setText(discount.isEmpty() ? "none" : discount);
         totalLabel.setText(Theme.money(b.getFinalAmount()));
         String label = b.getPaymentLabel();
         statusLabel.setText(b.isPaid() ? "PAID (" + b.getPaymentMethod() + ")" : label);
         statusLabel.setForeground(b.isPaid() ? Theme.GREEN : (label.equals("UNPAID") ? Theme.RED : Theme.AMBER));
-        staffLabel.setText(b.getServedBy() + (b.getReceivedBy().equals("-") ? "" : " / " + b.getReceivedBy()));
+        staffLabel.setText(b.getBilledBy());
     }
 
     /** Brings an accidentally ended game back (only while its bill is unpaid). */
@@ -222,16 +225,26 @@ public class BillingPanel extends ScreenPanel {
         }
     }
 
-    /** Opens the bill window, where the payment can be recorded and the bill printed. */
-    private void openBill() {
+    /** Opens the checkout of an unpaid bill (discount, payments, Billed by). */
+    private void openCheckout() {
         Bill b = selectedBill();
-        if (b == null) {
-            Theme.error(this, "Select a bill in the table first.");
-            return;
-        }
-        if (ReceiptDialog.show(frame, b)) {
+        if (b == null) { Theme.error(this, "Select a bill in the table first."); return; }
+        if (b.isCancelled()) { Theme.error(this, "This bill is cancelled."); return; }
+        if (b.isPaid()) { Theme.info(this, "Bill " + b.getBillNumber() + " is already paid.", "Checkout"); return; }
+        if (CheckoutDialog.open(frame, b)) {
             refresh();
             frame.refreshNotifications();
+        }
+    }
+
+    /** Shows the bill text so it can be printed. */
+    private void viewBill() {
+        Bill b = selectedBill();
+        if (b == null) { Theme.error(this, "Select a bill in the table first."); return; }
+        try {
+            ReceiptDialog.showText(frame, "Bill - " + b.getBillNumber(), billDAO.findById(b.getId()));   // with the payment parts
+        } catch (SQLException e) {
+            showDbError(e);
         }
     }
 }

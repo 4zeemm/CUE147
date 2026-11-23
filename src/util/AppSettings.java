@@ -37,6 +37,10 @@ public class AppSettings {
     public static void setNotificationsOn(boolean on) { PREFS.putBoolean("notifications", on); }
 
     /** Puts every setting back to its starting value. */
+    /** The "Billed by" person last chosen at THIS counter (0 = nobody yet). */
+    public static int getLastBilledById() { return PREFS.getInt("lastBilledBy", 0); }
+    public static void setLastBilledById(int staffId) { PREFS.putInt("lastBilledBy", staffId); }
+
     public static void resetAll() {
         try {
             PREFS.clear();

@@ -63,7 +63,7 @@ public class UiSmokeTest {
         check("Staff does NOT get Expenses buttons", !staff.contains("Edit") && !staff.contains("Delete") && !staff.contains("View Voucher"));
         check("Staff does NOT get Maintenance / Remove Table", !staff.contains("Maintenance") && !staff.contains("Remove Table") && !staff.contains("Add Table"));
         check("Staff does NOT get Cancel Bill / Change Method", !staff.contains("Cancel Bill") && !staff.contains("Change Method"));
-        check("Staff still gets Reopen Game, Record Payment and Start Game", staff.contains("Reopen Game") && staff.contains("Record Payment"));
+        check("Staff still gets Reopen Game, Checkout / Pay and Start Game", staff.contains("Reopen Game") && staff.contains("Checkout / Pay"));
 
         System.out.println(passed + " passed, " + failed + " failed");
         System.exit(failed > 0 ? 1 : 0);

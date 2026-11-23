@@ -1,8 +1,10 @@
 package ui;
 
 import dao.PriceDAO;
+import dao.StaffMemberDAO;
 import model.GameTable;
 import model.Price;
+import model.StaffMember;
 import service.BillingCalculator;
 
 import javax.swing.*;
@@ -16,8 +18,15 @@ import exception.InvalidInputException;
 import util.AppSettings;
 import util.Validator;
 
-/** Screen 9 (owner only) - settings in a JTabbedPane: Pricing, Billing Rules, Appearance, Club. */
+/** Screen 9 (owner only) - settings in a JTabbedPane: Pricing, Billing Rules, Appearance, Club, Staff List. */
 public class SettingsPanel extends ScreenPanel {
+    // Staff List tab: the names shown in "Billed by" at the checkout
+    private final StaffMemberDAO staffDAO = new StaffMemberDAO();
+    private final DefaultTableModel staffModel = Theme.tableModel("Name", "Status");
+    private final JTable staffTable = new JTable(staffModel);
+    private final List<StaffMember> staffShown = new java.util.ArrayList<>();
+    private final JTextField staffName = Theme.field(20);
+
     private final PriceDAO priceDAO = new PriceDAO();
     private final BillingCalculator calculator = new BillingCalculator();
 
@@ -57,6 +66,7 @@ public class SettingsPanel extends ScreenPanel {
         tabs.addTab("Billing Rules", billingTab());
         tabs.addTab("Appearance", appearanceTab());
         tabs.addTab("Club Settings", clubTab());
+        tabs.addTab("Staff List", staffTab());
         add(tabs, BorderLayout.CENTER);
         loadClubValues();
         loadAppearance();
@@ -304,8 +314,69 @@ public class SettingsPanel extends ScreenPanel {
 
     @Override
     public void refresh() {
+        loadStaff();
         loadPrices();
         loadClubValues();
         loadAppearance();
+    }
+
+    // ---------------- Staff List (MySQL table staff_members; used by "Billed by") ----------------
+
+    private JPanel staffTab() {
+        Theme.styleTable(staffTable);
+        staffTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        JPanel content = Theme.panel(new BorderLayout(0, 14));
+        JScrollPane sp = Theme.scroll(staffTable);
+        sp.setPreferredSize(new Dimension(0, 200));
+        content.add(sp, BorderLayout.NORTH);
+        JPanel form = Theme.panel(new GridBagLayout());
+        Theme.addRow(form, 0, "New name", staffName);
+        Theme.addRow(form, 1, "", Theme.label("These names appear in \"Billed by\" at the checkout. People who leave are switched off, "
+                + "so their old bills keep their name.", Theme.SMALL, Theme.MUTED));
+        content.add(form, BorderLayout.CENTER);
+        staffName.addActionListener(e -> addStaff());
+        return tab(content,
+                Theme.button("Add Name", Theme.GREEN, e -> addStaff()),
+                Theme.button("Switch On / Off", Theme.NEUTRAL, e -> toggleStaff()));
+    }
+
+    private void loadStaff() {
+        try {
+            staffShown.clear();
+            staffShown.addAll(staffDAO.findAll());
+            staffModel.setRowCount(0);
+            for (StaffMember m : staffShown) staffModel.addRow(new Object[]{m.getName(), m.isActive() ? "Active" : "Switched off"});
+        } catch (SQLException e) {
+            showDbError(e);
+        }
+    }
+
+    private void addStaff() {
+        try {
+            String name = Validator.requireName(staffName.getText());
+            if (name.length() > 40) throw new InvalidInputException("A name can have at most 40 characters.");
+            staffDAO.add(name);
+            staffName.setText("");
+            loadStaff();
+            frame.setStatus(name + " added to the staff list");
+        } catch (InvalidInputException e) {
+            Theme.error(this, e.getMessage());
+        } catch (SQLException e) {
+            if (e.getErrorCode() == 1062) Theme.error(this, "This name is already in the list.");
+            else showDbError(e);
+        }
+    }
+
+    private void toggleStaff() {
+        int row = staffTable.getSelectedRow();
+        if (row < 0) { Theme.error(this, "Select a name in the list first."); return; }
+        StaffMember m = staffShown.get(row);
+        try {
+            staffDAO.setActive(m.getId(), !m.isActive());
+            loadStaff();
+            frame.setStatus(m.getName() + (m.isActive() ? " switched off" : " switched on"));
+        } catch (SQLException e) {
+            showDbError(e);
+        }
     }
 }

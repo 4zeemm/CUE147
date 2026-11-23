@@ -46,6 +46,7 @@ public class BackendTest {
 
         // ---------- login ----------
         auth.createDefaultUsers();
+        new StaffMemberDAO().fillFromUsersIfEmpty();
         User owner = auth.login("owner", "owner123");
         User staff = auth.login("staff", "staff123");
         check("Owner login succeeds and returns an Owner object", owner instanceof Owner);
@@ -420,6 +421,65 @@ public class BackendTest {
         check("Editing an unknown expense changes nothing", !expenseDAO.update(new Expense(999999, "RENT", BigDecimal.ONE, today, "x", "CASH")));
         check("No active game is left behind by the tests", new SessionDAO().countActive() == 0);
 
+        // ---------- checkout: discounts, split payments, Billed by ----------
+        check("The test database is at the newest version", database.SchemaMigrator.migrate() == database.SchemaMigrator.latestVersion()
+                && database.SchemaMigrator.latestVersion() == 2);
+        StaffMemberDAO staffDAO = new StaffMemberDAO();
+        check("The Billed-by list starts with the names of the login accounts",
+                staffDAO.findActive().stream().anyMatch(m -> m.getName().equals("Club Owner")) && staffDAO.findActive().stream().anyMatch(m -> m.getName().equals("Counter Staff")));
+        int kenId = staffDAO.add("Ken");
+        check("A duplicate name in the staff list is refused by MySQL", sqlFails(() -> staffDAO.add("Ken")));
+        StaffMember ken = staffDAO.findActive().stream().filter(m -> m.getId() == kenId).findFirst().get();
+        GameTable ps5 = find(tableDAO, "PS5 Station 1");
+        final int c1 = sessions.startSession(find(tableDAO, "Pool Table 1"), customerDAO.findById(arunId), staff, LocalDateTime.now().minusMinutes(60));
+        final Bill toCheckout = sessions.endSession(c1, LocalDateTime.now(), staff);
+        check("A new bill remembers its table-time amount (Rs. 270)", same("270", toCheckout.getTableAmount()) && same("270", toCheckout.getChargesSubtotal()));
+        Checkout co = billService.startCheckout(toCheckout);
+        co.setDiscount(Checkout.DiscountType.PERCENT, new BigDecimal("10"));
+        co.setOccasion("Christmas");
+        co.addPayment("UPI", new BigDecimal("100"));
+        check("A bill cannot be closed before it is fully paid", throwsType(() -> billService.completeCheckout(toCheckout, co, ken, staff), BusinessException.class));
+        co.addPayment("CASH", co.getRemaining());
+        check("A bill cannot be closed without Billed by", throwsType(() -> billService.completeCheckout(toCheckout, co, null, staff), BusinessException.class));
+        BigDecimal revenueBeforeCheckout = billDAO.revenueBetween(today, today);
+        BigDecimal spentBeforeCheckout = customerDAO.findById(arunId).getTotalSpent();
+        billService.completeCheckout(toCheckout, co, ken, staff);
+        Bill closed = billDAO.findById(toCheckout.getId());
+        check("Checkout saves the discount: 10% (Christmas) = Rs. 27, final Rs. 243",
+                same("27", closed.getBillDiscountAmount()) && same("243", closed.getFinalAmount()) && closed.getDiscountLabel().equals("10% (Christmas)"));
+        check("Checkout saves PAID as SPLIT with two parts: UPI 100 + CASH 143", closed.isPaid() && closed.getPaymentMethod().equals("SPLIT")
+                && closed.getPaymentParts().size() == 2 && same("100", closed.getPaymentParts().get(0).getAmount()) && same("143", closed.getPaymentParts().get(1).getAmount()));
+        check("Checkout saves Billed by (Ken) and shows it on the bill", closed.getBilledBy().equals("Ken") && closed.toReceipt().contains("Billed by : Ken"));
+        check("The receipt shows Subtotal, Discount and FINAL TOTAL", closed.toReceipt().contains("Subtotal") && closed.toReceipt().contains("Discount")
+                && closed.toReceipt().contains("FINAL TOTAL"));
+        check("Revenue goes up by the discounted total (243)", revenueBeforeCheckout.add(new BigDecimal("243")).compareTo(billDAO.revenueBetween(today, today)) == 0);
+        check("Customer spending goes up by the discounted total (243)", spentBeforeCheckout.add(new BigDecimal("243")).compareTo(customerDAO.findById(arunId).getTotalSpent()) == 0);
+        check("Paying the same bill again is refused", throwsType(() -> billService.completeCheckout(toCheckout, co, ken, staff), BusinessException.class));
+        check("A split bill's method cannot be changed", throwsType(() -> billService.changePaymentMethod(closed, "CASH", owner), BusinessException.class));
+        billService.cancelBill(closed, owner, "Test refund of a split bill");
+        check("Refunding a split bill takes the whole 243 out of revenue", revenueBeforeCheckout.compareTo(billDAO.revenueBetween(today, today)) == 0);
+
+        final int c2 = sessions.startSession(ps5, customerDAO.findById(meeraId), staff, LocalDateTime.now().minusMinutes(60));
+        final Bill later = sessions.endSession(c2, LocalDateTime.now(), staff);
+        Checkout co2 = billService.startCheckout(later);
+        co2.setDiscount(Checkout.DiscountType.FLAT, new BigDecimal("20"));
+        billService.saveForLater(later, co2, ken);
+        Bill unpaidLater = billDAO.findById(later.getId());
+        check("Pay Later keeps the bill UNPAID with its discount and Billed by", !unpaidLater.isPaid() && same("100", unpaidLater.getFinalAmount())
+                && same("20", unpaidLater.getBillDiscountAmount()) && unpaidLater.getBilledBy().equals("Ken"));
+        Checkout co3 = billService.startCheckout(unpaidLater);
+        check("Opening the checkout again brings back the saved discount", co3.getDiscountType() == Checkout.DiscountType.FLAT && same("100", co3.getFinalTotal()));
+        billService.recordPayment(unpaidLater, "CASH", staff);
+        Bill paidLater = billDAO.findById(later.getId());
+        check("A one-method payment saves one part with the full amount", paidLater.isPaid() && paidLater.getPaymentParts().size() == 1
+                && paidLater.getPaymentParts().get(0).getMethod().equals("CASH") && same("100", paidLater.getPaymentParts().get(0).getAmount()));
+        billService.changePaymentMethod(paidLater, "UPI", owner);
+        check("Changing the method of a one-method bill also changes its part", billDAO.findById(later.getId()).getPaymentParts().get(0).getMethod().equals("UPI"));
+        staffDAO.setActive(kenId, false);
+        check("A switched-off name leaves the Billed-by list but old bills keep it",
+                staffDAO.findActive().stream().noneMatch(m -> m.getId() == kenId) && billDAO.findById(later.getId()).getBilledBy().equals("Ken"));
+        check("No active game is left after the checkout tests", new SessionDAO().countActive() == 0);
+
         System.out.println(passed + " passed, " + failed + " failed");
         if (failed > 0) System.exit(1);
     }
@@ -461,7 +521,8 @@ public class BackendTest {
     /** Empties the transaction tables of the TEST database so every test run starts clean. */
     static void cleanTestDatabase() throws SQLException {
         try (Connection con = DBConnection.getConnection(); Statement st = con.createStatement()) {
-            for (String table : new String[]{"payments", "bills", "sessions", "bookings", "expenses", "memberships", "staff_shifts", "users"}) {
+            for (String table : new String[]{"payment_parts", "payments", "bills", "sessions", "bookings", "expenses", "memberships",
+                    "staff_shifts", "staff_members", "users"}) {
                 st.executeUpdate("DELETE FROM " + table);
             }
             st.executeUpdate("DELETE FROM customers WHERE is_walk_in = FALSE");

@@ -1,6 +1,5 @@
 package ui;
 
-import dao.CustomerDAO;
 import dao.GameTableDAO;
 import dao.PriceDAO;
 import model.Bill;
@@ -32,7 +31,6 @@ import java.util.Map;
 /** Screen 3 - table cards, overview JTable, right-click menu. Start/End sessions, owner can add/edit/remove tables. */
 public class TablesPanel extends ScreenPanel {
     private final GameTableDAO tableDAO = new GameTableDAO();
-    private final CustomerDAO customerDAO = new CustomerDAO();
     private final PriceDAO priceDAO = new PriceDAO();
     private final SessionService sessionService = new SessionService();
 
@@ -269,11 +267,15 @@ public class TablesPanel extends ScreenPanel {
             return;
         }
         try {
-            List<Customer> customers = customerDAO.findAll();
-            Object choice = JOptionPane.showInputDialog(this, "Who is playing on " + t.getName() + "?\n(Register new customers on the Customers screen)",
-                    "Start Game", JOptionPane.QUESTION_MESSAGE, null, customers.toArray(), customers.get(0));
-            if (choice == null) return;
-            Customer customer = (Customer) choice;
+            CustomerPicker picker = new CustomerPicker();
+            Customer customer = null;
+            while (customer == null) {
+                int answer = JOptionPane.showConfirmDialog(this, new Object[]{"Who is playing on " + t.getName() + "?", picker},
+                        "Start Game", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+                if (answer != JOptionPane.OK_OPTION) return;
+                customer = picker.getSelectedCustomer();
+                if (customer == null) Theme.error(this, "Choose the customer in the list (or add a new one).");
+            }
             sessionService.startSession(t, customer, frame.getUser());
             selectedId = t.getId();
             refresh();
@@ -300,7 +302,7 @@ public class TablesPanel extends ScreenPanel {
             selectedId = t.getId();
             refresh();
             frame.setStatus(t.getName() + " is now AVAILABLE - bill " + bill.getBillNumber() + " created");
-            ReceiptDialog.show(frame, bill);   // shows the bill and lets the staff record the payment
+            CheckoutDialog.open(frame, bill);   // one-screen checkout: discount, payments, Billed by
             frame.refreshNotifications();
         } catch (BusinessException e) {
             Theme.error(this, e.getMessage());

@@ -3,6 +3,8 @@ package model;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 
 /** A bill for one finished session, together with its payment details. */
 public class Bill implements Receiptable {
@@ -29,6 +31,16 @@ public class Bill implements Receiptable {
     private String paymentMethod = "-";
     private LocalDateTime paidAt;
 
+    // checkout details (database version 2)
+    private BigDecimal tableAmount;                     // table time after member discount, rounded
+    private String billDiscountType = "NONE";           // NONE, FLAT or PERCENT
+    private BigDecimal billDiscountValue = BigDecimal.ZERO;
+    private BigDecimal billDiscountAmount = BigDecimal.ZERO;
+    private String discountOccasion = "";
+    private Integer billedByStaffId;                    // null for bills made before the "Billed by" list
+    private String billedBy = "-";
+    private List<PaymentPart> paymentParts = new ArrayList<>();
+
     public Bill(int id, String billNumber, int sessionId, int billedMinutes, BigDecimal hourlyRate,
                 BigDecimal subtotal, BigDecimal discountPercent, BigDecimal finalAmount, LocalDateTime createdAt) {
         this.id = id;
@@ -40,7 +52,21 @@ public class Bill implements Receiptable {
         this.discountPercent = discountPercent;
         this.finalAmount = finalAmount;
         this.createdAt = createdAt;
+        this.tableAmount = finalAmount;
     }
+
+    public void setCheckoutDetails(BigDecimal tableAmount, String discountType, BigDecimal discountValue, BigDecimal discountAmount,
+                                   String occasion, Integer billedByStaffId, String billedBy) {
+        this.tableAmount = tableAmount;
+        this.billDiscountType = discountType;
+        this.billDiscountValue = discountValue;
+        this.billDiscountAmount = discountAmount;
+        this.discountOccasion = occasion == null ? "" : occasion;
+        this.billedByStaffId = billedByStaffId;
+        this.billedBy = billedBy == null ? "-" : billedBy;
+    }
+
+    public void setPaymentParts(List<PaymentPart> parts) { this.paymentParts = new ArrayList<>(parts); }
 
     public void setSessionDetails(String customerName, String tableName, LocalDateTime start, LocalDateTime end) {
         this.customerName = customerName;
@@ -90,6 +116,25 @@ public class Bill implements Receiptable {
     public String getPaymentStatus() { return paymentStatus; }
     public String getPaymentMethod() { return paymentMethod; }
     public boolean isPaid() { return paymentStatus.equals("PAID"); }
+    public BigDecimal getTableAmount() { return tableAmount; }
+    /** Everything before the bill discount: table time (and later food and drinks). */
+    public BigDecimal getChargesSubtotal() { return tableAmount; }
+    public String getBillDiscountType() { return billDiscountType; }
+    public BigDecimal getBillDiscountValue() { return billDiscountValue; }
+    public BigDecimal getBillDiscountAmount() { return billDiscountAmount; }
+    public String getDiscountOccasion() { return discountOccasion; }
+    public Integer getBilledByStaffId() { return billedByStaffId; }
+    /** Who billed it; for bills made before the "Billed by" list, the user who ended the game. */
+    public String getBilledBy() { return billedBy.equals("-") ? servedBy : billedBy; }
+    public List<PaymentPart> getPaymentParts() { return paymentParts; }
+
+    /** For example "10% (Christmas)" or "Rs. 50.00". Empty when there is no discount. */
+    public String getDiscountLabel() {
+        if (billDiscountType.equals("NONE")) return "";
+        String what = billDiscountType.equals("PERCENT") ? billDiscountValue.stripTrailingZeros().toPlainString() + "%"
+                : String.format("Rs. %.2f", billDiscountValue);
+        return discountOccasion.isEmpty() ? what : what + " (" + discountOccasion + ")";
+    }
 
     /** Time played, for example "1 h 6 m". Games under one hour are billed as one full hour (rule 1). */
     public String getDurationText() {
@@ -123,14 +168,20 @@ public class Bill implements Receiptable {
         sb.append(String.format("Duration  : %s%n", getDurationText()));
         sb.append(String.format("Rate/hour : Rs. %.2f%n", hourlyRate));
         sb.append(line);
-        sb.append(String.format("Subtotal             Rs. %10.2f%n", subtotal));
+        sb.append(String.format("Table time           Rs. %10.2f%n", tableAmount));
         if (discountPercent.signum() > 0) {
-            sb.append(String.format("Member discount %4.1f%%%n", discountPercent));
+            sb.append(String.format("  (member discount %.1f%% included)%n", discountPercent));
         }
-        sb.append(String.format("TOTAL (rounded)      Rs. %10.2f%n", finalAmount));
+        sb.append(String.format("Subtotal             Rs. %10.2f%n", getChargesSubtotal()));
+        sb.append(String.format("Discount           - Rs. %10.2f%n", billDiscountAmount));
+        if (!getDiscountLabel().isEmpty()) sb.append(String.format("  %s%n", getDiscountLabel()));
+        sb.append(String.format("FINAL TOTAL          Rs. %10.2f%n", finalAmount));
         sb.append(line);
         sb.append(String.format("Payment   : %s (%s)%n", getPaymentLabel(), paymentMethod));
-        sb.append(String.format("Served by : %s%n", servedBy));
+        for (PaymentPart part : paymentParts) {
+            sb.append(String.format("  %-4s               Rs. %10.2f%n", part.getMethod(), part.getAmount()));
+        }
+        sb.append(String.format("Billed by : %s%n", getBilledBy()));
         if (receivedBy != null && !receivedBy.equals("-")) sb.append(String.format("Received  : %s%n", receivedBy));
         if (isCancelled()) sb.append(String.format("*** BILL CANCELLED: %s%n", cancelReason));
         sb.append("        Thank you! Visit again.\n");

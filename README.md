@@ -16,6 +16,15 @@ The MySQL driver is copied to `target/lib/` next to the jar. Windows and Mac ins
 Developer scripts (macOS, local MySQL in `~/cue147-mysql`): `./setup-db.sh` (once), `./run.sh`, `./test.sh`
 (all automatic tests), `./upgrade-db.sh`, `./backup-db.sh`, `./start-mysql.sh`, `./stop-mysql.sh`.
 
+## Daily use (counter staff)
+- **Start a game:** Tables > Start Game > type the customer's name or phone. If they are new, press **Add new customer**
+  (name and phone only). The customer's membership is shown at once.
+- **End a game:** the checkout opens. Choose **Billed by**, add a discount if needed (Rs. or %, optional occasion),
+  then press **Pay Cash** or **Pay UPI**. For a split bill, type the first amount, **Add Payment**, then pay the rest.
+  The remaining amount is always shown; the bill closes only when it is fully paid. **Pay Later** keeps it unpaid
+  (Billing > Checkout / Pay finishes it later).
+- The owner manages the **Billed by** names in Settings > Staff List.
+
 ## Database
 - **Settings** are not in the code. Each computer saves them in `.cue147/database.properties` in the user's home folder
   (Windows: `C:\Users\NAME\.cue147\`). Change them with **Database settings** on the login screen

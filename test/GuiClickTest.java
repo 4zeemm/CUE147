@@ -256,8 +256,47 @@ public class GuiClickTest {
         });
     }
 
+    /** Types the name into the customer search box of the Start Game window and picks the person from the list. */
     static void chooseCustomer(JDialog d, String name) throws Exception {
-        edt(() -> { JComboBox<?> box = all(d, JComboBox.class, false).get(0); for (int i = 0; i < box.getItemCount(); i++) if (String.valueOf(box.getItemAt(i)).contains(name)) box.setSelectedIndex(i); });
+        CustomerPicker picker = onEdt(() -> all(d, CustomerPicker.class, false).get(0));
+        edt(() -> picker.getSearchField().setText(name));
+        sleep(300);
+        edt(() -> {
+            JList<?> list = all(picker, JList.class, false).get(0);
+            for (int i = 0; i < list.getModel().getSize(); i++) {
+                if (String.valueOf(list.getModel().getElementAt(i)).contains(name)) { list.setSelectedIndex(i); break; }
+            }
+        });
+        sleep(200);
+    }
+
+    /** Chooses a name in the "Billed by" list of the checkout window. */
+    static void chooseBilledBy(JDialog d, String name) throws Exception {
+        edt(() -> {
+            for (JComboBox<?> box : all(d, JComboBox.class, false))
+                for (int i = 0; i < box.getItemCount(); i++)
+                    if (box.getItemAt(i) instanceof StaffMember && ((StaffMember) box.getItemAt(i)).getName().equals(name)) box.setSelectedIndex(i);
+        });
+    }
+
+    /** Waits for a pop-up window whose title starts with the given text. */
+    static JDialog waitForTitle(String title) {
+        for (int i = 0; i < 400; i++) {
+            for (Window w : Window.getWindows())
+                if (w instanceof JDialog && w.isShowing() && ((JDialog) w).getTitle() != null && ((JDialog) w).getTitle().startsWith(title)) return (JDialog) w;
+            sleep(15);
+        }
+        return null;
+    }
+
+    /** The text of the first label in the window that starts with the given text (or "none"). */
+    static String labelStarting(Container root, String start) throws Exception {
+        return onEdt(() -> all(root, JLabel.class, false).stream().map(JLabel::getText)
+                .filter(t -> t != null && t.startsWith(start)).findFirst().orElse("none"));
+    }
+
+    static boolean hasLabel(Container root, String text) throws Exception {
+        return onEdt(() -> all(root, JLabel.class, false).stream().anyMatch(l -> text.equals(l.getText())));
     }
 
     // ------------------------------------------------------------------ the test
@@ -269,6 +308,7 @@ public class GuiClickTest {
         new File("docs/test-results").mkdirs();
 
         BackendTest.cleanTestDatabase();
+        util.AppSettings.setLastBilledById(0);   // the counter has no "last Billed by" yet
         edt(Theme::install);
         CustomerDAO customerDAO = new CustomerDAO();
         GameTableDAO tableDAO = new GameTableDAO();
@@ -483,7 +523,7 @@ public class GuiClickTest {
             JDialog d = waitForDialog();
             check(d != null, "no player pop-up");
             shot(d, "05-start-game");
-            edt(() -> { JComboBox<?> box = all(d, JComboBox.class, false).get(0); for (int i = 0; i < box.getItemCount(); i++) if (String.valueOf(box.getItemAt(i)).contains("Rahul Sharma")) box.setSelectedIndex(i); });
+            chooseCustomer(d, "Rahul Sharma");
             answer("OK");
             String info = answer("OK");
             check(info.contains("Game started"), info);
@@ -507,8 +547,9 @@ public class GuiClickTest {
         test("Payments", "End Game, then pay by Cash", "Bill Rs. 270 (1-hour minimum, Pool Men) saved as PAID by CASH", () -> {
             click(tp, "End Game");
             answer("Yes");
-            JDialog bill = waitForDialog();
-            check(bill != null, "bill window did not open");
+            JDialog bill = waitForTitle("Checkout");
+            check(bill != null, "checkout window did not open");
+            chooseBilledBy(bill, "Counter Staff");
             sleep(400);
             shot(bill, "06-bill");
             AbstractButton cash = findButton(bill, "Pay Cash");
@@ -530,7 +571,7 @@ public class GuiClickTest {
         test("Payments", "Second game: Priya (Ladies) pays by UPI", "Bill Rs. 220 (Pool Ladies) saved as PAID by UPI", () -> {
             click(tp, "Start Game");
             JDialog d = waitForDialog();
-            edt(() -> { JComboBox<?> box = all(d, JComboBox.class, false).get(0); for (int i = 0; i < box.getItemCount(); i++) if (String.valueOf(box.getItemAt(i)).contains("Priya Nair")) box.setSelectedIndex(i); });
+            chooseCustomer(d, "Priya Nair");
             answer("OK"); answer("OK");
             click(tp, "End Game"); answer("Yes");
             JDialog bill = waitForDialog();
@@ -676,6 +717,98 @@ public class GuiClickTest {
             return "MySQL has 0 expenses; dashboard today's expenses = " + s.todayExpenses;
         });
 
+        // ================= CUSTOMER SEARCH + ONE-SCREEN CHECKOUT =================
+        goTo("Tables");
+        TablesPanel tpk = panel(TablesPanel.class);
+        test("Customers", "Start Game: a new customer is added from the search box", "Unknown phone -> 'Add new customer' (name + phone only) -> game starts", () -> {
+            rightClick(cardFor(tpk, "Pool Table 2"));
+            clickPopup("Start Game");
+            JDialog d = waitForDialogWith(CustomerPicker.class);
+            check(d != null, "Start Game window did not open");
+            CustomerPicker picker = all(d, CustomerPicker.class, false).get(0);
+            edt(() -> picker.getSearchField().setText("9876500077"));
+            sleep(400);
+            AbstractButton add = findButton(d, "Add new customer");
+            check(add != null && add.isShowing(), "Add button is not shown");
+            shot(d, "05b-customer-search-add");
+            SwingUtilities.invokeLater(add::doClick);
+            JDialog form = waitForTitle("Add Customer");
+            check(form != null, "Add Customer window did not open");
+            List<JTextField> fields = all(form, JTextField.class, false);
+            String prefilled = onEdt(() -> fields.get(1).getText());
+            check(prefilled.equals("9876500077"), "phone not filled in: " + prefilled);
+            edt(() -> fields.get(0).setText("Kiran Rao"));
+            SwingUtilities.invokeLater(findButton(form, "OK")::doClick);
+            for (int i = 0; i < 200 && form.isShowing(); i++) sleep(15);
+            sleep(400);
+            Customer chosen = onEdt(picker::getSelectedCustomer);
+            check(chosen != null && chosen.getName().equals("Kiran Rao"), "new customer not selected");
+            SwingUtilities.invokeLater(findButton(d, "OK")::doClick);
+            for (int i = 0; i < 200 && d.isShowing(); i++) sleep(15);   // wait until the Start Game window has closed
+            String info = answer("OK");
+            check(info.contains("Kiran Rao"), info);
+            check(customerDAO.search("9876500077").size() == 1, "not in MySQL");
+            return "Phone pre-filled, only the name typed; pop-up: \"" + info.replace("\n", " ") + "\"";
+        });
+        test("Checkout", "End Game: 10% Christmas discount, then Pay Later", "Wrong % shows a red message; bill saved UNPAID: 270 - 27 = Rs. 243", () -> {
+            rightClick(cardFor(tpk, "Pool Table 2"));
+            clickPopup("End Game");
+            answer("Yes");
+            JDialog co = waitForTitle("Checkout");
+            check(co != null, "checkout did not open");
+            JComboBox<?> type = onEdt(() -> all(co, JComboBox.class, false).stream().filter(b -> b.getItemCount() == 3 && "Percent %".equals(b.getItemAt(2))).findFirst().get());
+            JSpinner value = all(co, JSpinner.class, false).get(0);
+            edt(() -> { type.setSelectedIndex(2); value.setValue(150.0); });
+            sleep(300);
+            String warning = labelStarting(co, "A percentage");
+            check(warning.contains("more than 100%"), "no message for 150%: " + warning);
+            edt(() -> value.setValue(10.0));
+            JComboBox<?> occasion = onEdt(() -> all(co, JComboBox.class, false).stream().filter(JComboBox::isEditable).findFirst().get());
+            edt(() -> occasion.setSelectedItem("Christmas"));
+            sleep(300);
+            check(hasLabel(co, "₹243.00"), "final total is not 243");
+            shot(co, "06b-checkout-discount");
+            SwingUtilities.invokeLater(findButton(co, "Pay Later")::doClick);
+            for (int i = 0; i < 200 && co.isShowing(); i++) sleep(15);
+            Bill b = billDAO.search("Kiran", false).get(0);
+            check(!b.isPaid() && b.getFinalAmount().compareTo(new BigDecimal("243")) == 0, b.getPaymentLabel() + " " + b.getFinalAmount());
+            check(b.getBillDiscountAmount().compareTo(new BigDecimal("27")) == 0 && b.getDiscountOccasion().equals("Christmas"), b.getDiscountLabel());
+            check(b.getBilledBy().equals("Counter Staff"), "billed by " + b.getBilledBy());
+            return "Message for 150%: \"" + warning + "\"; MySQL: " + b.getPaymentLabel() + ", subtotal 270, discount " + b.getDiscountLabel()
+                    + " = Rs. " + b.getBillDiscountAmount() + ", total Rs. " + b.getFinalAmount() + ", billed by " + b.getBilledBy() + " (remembered)";
+        });
+        test("Checkout", "Billing > Checkout / Pay: Rs. 100 UPI + the rest in cash", "Remaining shown after each part; bill PAID as SPLIT with 2 parts", () -> {
+            goTo("Billing");
+            BillingPanel bpk = panel(BillingPanel.class);
+            JTable bills = all(bpk, JTable.class, true).get(0);
+            selectRow(bills, rowWith(bills, "Kiran"));
+            click(bpk, "Checkout / Pay");
+            JDialog co = waitForTitle("Checkout");
+            check(co != null, "checkout did not open");
+            check(hasLabel(co, "₹243.00"), "saved discount not restored");
+            JComboBox<?> method = onEdt(() -> all(co, JComboBox.class, false).stream().filter(b -> b.getItemCount() == 2 && "UPI".equals(b.getItemAt(1))).findFirst().get());
+            JSpinner amount = all(co, JSpinner.class, false).get(1);
+            edt(() -> { method.setSelectedIndex(1); amount.setValue(100.0); });
+            SwingUtilities.invokeLater(findButton(co, "Add Payment")::doClick);
+            sleep(400);
+            check(hasLabel(co, "₹143.00"), "remaining is not 143");
+            boolean completeOff = onEdt(() -> !findButton(co, "Complete Bill").isEnabled());
+            check(completeOff, "Complete Bill is enabled before the bill is fully paid");
+            shot(co, "06c-checkout-split");
+            SwingUtilities.invokeLater(findButton(co, "Pay Cash")::doClick);
+            String text = answer("OK");
+            check(text.contains("SPLIT"), text);
+            answer("Close");
+            Bill paid = billDAO.findById(billDAO.search("Kiran", false).get(0).getId());
+            check(paid.isPaid() && paid.getPaymentMethod().equals("SPLIT") && paid.getPaymentParts().size() == 2, paid.getPaymentLabel() + " " + paid.getPaymentMethod());
+            check(paid.getPaymentParts().get(0).getMethod().equals("UPI") && paid.getPaymentParts().get(0).getAmount().compareTo(new BigDecimal("100")) == 0
+                    && paid.getPaymentParts().get(1).getMethod().equals("CASH") && paid.getPaymentParts().get(1).getAmount().compareTo(new BigDecimal("143")) == 0, "parts wrong");
+            int row = rowWith(bills, "Kiran");
+            String billedBy = onEdt(() -> String.valueOf(bills.getModel().getValueAt(row, 8)));
+            check(billedBy.equals("Counter Staff"), "Billed by column shows " + billedBy);
+            return "Remaining Rs. 143 after UPI 100, Complete Bill was off until paid; pop-up: \"" + text + "\"; MySQL parts: UPI 100 + CASH 143; history shows Billed by " + billedBy;
+        });
+
         // ================= BOOKINGS / MEMBERSHIP / SETTINGS / REPORTS =================
         goTo("Bookings");
         BookingsPanel bk = panel(BookingsPanel.class);
@@ -746,6 +879,22 @@ public class GuiClickTest {
             return "Pop-up: \"" + text + "\"; MySQL: " + m.getCustomerName() + " " + m.getDisplayStatus() + ", " + m.getDiscountPercent() + "% until " + m.getExpiryDate();
         });
         shot(frame, "10-membership");
+        test("Customers", "Start Game shows the chosen customer's membership", "The search box shows 'Member until <date>' by itself", () -> {
+            String member = new MembershipDAO().findAll().get(0).getCustomerName();
+            goTo("Tables");
+            TablesPanel tpm = panel(TablesPanel.class);
+            rightClick(cardFor(tpm, "PS5 Station 1"));
+            clickPopup("Start Game");
+            JDialog d = waitForDialogWith(CustomerPicker.class);
+            chooseCustomer(d, member);
+            String label = labelStarting(d, "Member");
+            check(label.startsWith("Member until") || label.startsWith("Member,"), label);
+            shot(d, "05c-customer-membership");
+            SwingUtilities.invokeLater(findButton(d, "Cancel")::doClick);
+            for (int i = 0; i < 200 && d.isShowing(); i++) sleep(15);
+            check(sessionDAO.countActive() == 0, "a game was started");
+            return member + ": \"" + label + "\"";
+        });
         goTo("Settings");
         SettingsPanel sp = panel(SettingsPanel.class);
         test("Settings", "Change Pool price for Men to Rs. 280", "Price saved in MySQL", () -> {
@@ -805,6 +954,24 @@ public class GuiClickTest {
             String text = answer("OK");
             check(util.AppSettings.getClubName().equals("CUE 147 Test Club") && util.AppSettings.getClubPhone().equals("9123456789"), "not saved");
             return "Pop-up: \"" + text + "\"; saved club name = " + util.AppSettings.getClubName();
+        });
+        test("Settings", "Staff List: add Ken, refuse a duplicate, switch Ken off", "Ken saved; duplicate refused; switched off (kept for old bills)", () -> {
+            edt(() -> settingsTabs.setSelectedIndex(4));
+            sleep(300);
+            JTextField name = all(sp, JTextField.class, true).get(0);
+            setText(field(name), "Ken");
+            click(sp, "Add Name");
+            check(new StaffMemberDAO().findActive().stream().anyMatch(m -> m.getName().equals("Ken")), "Ken not saved");
+            setText(field(name), "Ken");
+            click(sp, "Add Name");
+            String text = answer("OK");
+            check(text.contains("already in the list"), text);
+            JTable staffTable = all(sp, JTable.class, true).get(0);
+            selectRow(staffTable, rowWith(staffTable, "Ken"));
+            shot(frame, "11c-settings-staff-list");
+            click(sp, "Switch On / Off");
+            check(new StaffMemberDAO().findAll().stream().anyMatch(m -> m.getName().equals("Ken") && !m.isActive()), "Ken still active");
+            return "Ken added; duplicate pop-up: \"" + text + "\"; Ken switched off";
         });
         test("Billing", "View / Print Bill: print the bill to a file", "The bill shows the new club name; a PostScript print file is made", () -> {
             edt(() -> settingsTabs.setSelectedIndex(0));
@@ -1047,7 +1214,7 @@ public class GuiClickTest {
         test("Permissions", "Staff runs a game and takes UPI payment", "Bill saved; 'received by' is Counter Staff", () -> {
             click(tp2, "Start Game");
             JDialog d = waitForDialog();
-            edt(() -> { JComboBox<?> box = all(d, JComboBox.class, false).get(0); for (int i = 0; i < box.getItemCount(); i++) if (String.valueOf(box.getItemAt(i)).contains("Rahul Sharma")) box.setSelectedIndex(i); });
+            chooseCustomer(d, "Rahul Sharma");
             answer("OK"); answer("OK");
             click(tp2, "End Game"); answer("Yes");
             JDialog bill = waitForDialog();

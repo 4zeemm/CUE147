@@ -120,6 +120,15 @@ Phase 5: UI polish (FlatLaf, dashboard), installers and GitHub Actions.
   main-method test programs against the separate database `cue147_test` (`-Dcue147.db=cue147_test`).
   They never touch the real `cue147` database. GUI tests must never press Save in Database settings
   (that would overwrite the developer's real settings file).
-- Phase status: Phase 1 done (Maven, shared-database settings, migrations). Next: Phase 2.
+- Phase status: Phase 1 done (Maven, shared-database settings, migrations). Phase 2 done (customer
+  search-or-add picker with membership, one-screen checkout, discounts, split payments, Billed by). Next: Phase 3.
+- Checkout money rules live in `service.Checkout` (pure, JUnit-tested in `test/service/CheckoutTest.java`).
+  UI: `ui.CheckoutDialog` (opened after End Game and from Billing > Checkout / Pay). Saving: `BillService.completeCheckout`
+  -> `BillDAO.completeCheckout` (one transaction). Bill subtotal = `bills.table_amount` (+ F&B in Phase 3).
+- Payments: `payments` keeps ONE row per bill (status PENDING/PAID/CANCELLED/REFUNDED, amount = final total,
+  method CASH/UPI/SPLIT). Each part (method + amount) is in `payment_parts`. Revenue still sums `payments` (PAID).
+- "Billed by" names: table `staff_members` (Settings > Staff List), separate from login `users`. Never delete a name,
+  switch it off. The last name used is remembered per computer (`AppSettings.getLastBilledById`).
+- Customer choosing: `ui.CustomerPicker` (one search box, Add with name + phone only, shows membership).
 - Local development MySQL lives in `~/cue147-mysql` (socket `~/cue147-mysql/mysql.sock`, root has no password locally).
 - The code started as a first-year student project: keep it readable and explainable, no clever tricks.

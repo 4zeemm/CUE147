@@ -63,6 +63,7 @@ public class LoginFrame extends JFrame {
         try {
             SchemaMigrator.migrate();          // adds new tables/columns after an update (keeps all data)
             authService.createDefaultUsers();
+            new dao.StaffMemberDAO().fillFromUsersIfEmpty();   // first names for "Billed by" on a new database
         } catch (BusinessException e) {
             Theme.error(this, e.getMessage());
         } catch (SQLException e) {
