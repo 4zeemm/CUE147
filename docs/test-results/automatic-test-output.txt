@@ -1,0 +1,311 @@
+=== Billing calculator tests ===
+PASS  0 min (minimum one hour), rate 300  -> 300.00
+PASS  20 min, rate 300  -> 300.00
+PASS  59 min, rate 300  -> 300.00
+PASS  exactly 60 min, rate 300  -> 300.00
+PASS  1h 03m (inside 5 min grace), rate 300  -> 300.00
+PASS  1h 05m (last free minute), rate 300  -> 300.00
+PASS  1h 06m (spec example), rate 300  -> 305.00
+PASS  1h 10m, rate 300 = 300+25  -> 325.00
+PASS  1h 30m, rate 300 = 300+125  -> 425.00
+PASS  1h 59m, rate 300 = 300+270  -> 570.00
+PASS  2h 00m, rate 300  -> 600.00
+PASS  2h 06m, rate 300  -> 605.00
+PASS  3h 45m, rate 270 (pool men) = 810+180  -> 990.00
+PASS  rounding: 1h 06m, rate 270 = 274.50 -> 270  -> 270.00
+PASS  rounding: 1h 08m, rate 320 = 336.00 -> 335  -> 335.00
+PASS  PS5 2h 30m, rate 120 = 240+50  -> 290.00
+PASS  10% member discount, 1h, rate 300 -> 270  -> 270.00
+PASS  10% member discount, 1h 30m, rate 300: 425-42.5=382.5 -> 380  -> 380.00
+PASS  NoDiscount policy: 1h30m at 300 -> 425
+PASS  MembershipDiscount(10%) policy: 1h30m at 300 -> 380
+PASS  Both policies answer getDiscountPercent()/getName()
+21 passed, 0 failed
+=== Backend tests (database cue147_test) ===
+PASS  Database connection works
+PASS  Owner login succeeds and returns an Owner object
+PASS  Staff login succeeds and returns a Staff object
+PASS  Owner can manage pricing, staff cannot
+PASS  Owner can view reports, staff cannot
+PASS  Staff cannot manage tables / expenses / staff
+PASS  Wrong password is rejected
+PASS  Unknown user is rejected
+PASS  Password is not stored as plain text
+PASS  Same password gives different hashes (salt)
+PASS  New staff user can log in
+PASS  Deactivated user cannot log in
+PASS  Short password is rejected
+PASS  Customer saved and gets an id
+PASS  Duplicate phone number is rejected by MySQL
+PASS  Search by name finds the customer
+PASS  Search by phone finds the customer
+PASS  Customer edit is saved
+PASS  Walk-in guests exist but are not counted as customers
+PASS  Starting configuration: 5 tables (3 pool, 1 snooker, 1 PS5)
+PASS  Owner can add a table
+PASS  Table name and type can be edited
+PASS  Table without history is really deleted
+PASS  Pool men price from database is 270
+PASS  Snooker ladies price from database is 270
+PASS  Price can be changed
+PASS  Session starts and the table becomes OCCUPIED
+PASS  Second active session on the same table is blocked
+PASS  Active session count is 1
+PASS  1h 30m snooker (men, 320/h) = 453.33 -> Rs.450
+PASS  Bill saved with unique number and PENDING payment
+PASS  Table is AVAILABLE after the session ends
+PASS  Customer visit count increased
+PASS  Ending the same session twice is rejected
+PASS  1h 06m pool (ladies, 220/h) = 220 + 1 min charge 3.67 -> Rs.220
+PASS  20 minutes is billed as the minimum one hour (220)
+PASS  Bill numbers are unique
+PASS  Member discount is found for an active member
+PASS  No discount for a non-member
+PASS  Member bill: 220 - 10% = 198 -> Rs.195
+PASS  Cancelled membership gives no discount
+PASS  Revenue is 0 before any payment
+PASS  Payment is saved (PAID, CASH)
+PASS  Paying the same bill twice is rejected
+PASS  Customer total spending updated (Arun: 450)
+PASS  Bill history of a customer works
+PASS  Unpaid-only search works (2 unpaid)
+PASS  Bill search by number works
+PASS  Receipt text contains the bill number
+PASS  Expenses are saved and listed
+PASS  Today's expenses total is 1200.50 (or 6200.50 on the 1st)
+PASS  Staff does not have permission to manage (delete) expenses
+PASS  Owner has permission to delete expenses
+PASS  Without pressing Yes (Cancel) nothing is deleted
+PASS  Deleting an expense by its id returns true
+PASS  The record is really gone from MySQL
+PASS  The other expense (rent) was NOT deleted
+PASS  Deleting the same id again returns false (no error)
+PASS  Deleting an unknown id deletes nothing
+PASS  Expense total after delete = rent only (today's electricity removed)
+PASS  Dashboard monthly expenses updated to 5000
+PASS  Dashboard estimated profit updated (revenue - 5000)
+PASS  Dashboard: today's revenue = 450 + 220 (paid bills only)
+PASS  Dashboard: monthly revenue = 670
+PASS  Dashboard: monthly expenses = 6200.50
+PASS  Dashboard: estimated profit = 670 - 6200.50
+PASS  Dashboard: total customers = 2
+PASS  Dashboard: tables 5 total, 0 occupied, 5 available
+PASS  Dashboard: running session shows 1 active, 1 occupied, 4 available
+PASS  Table usage report counts the games (pool table 1 has 3)
+PASS  Notifications list is not empty
+PASS  Table with history is deactivated, not deleted
+PASS  Booking saved
+PASS  Same table and time is detected as booked
+PASS  Overlap: 19:00 is inside the 18:00-20:00 booking
+PASS  Overlap: 17:30 for 1 h runs into the 18:00 booking
+PASS  No overlap: 17:00 for 1 h ends exactly at 18:00
+PASS  No overlap: 20:00 starts when the booking ends
+PASS  No overlap on another table
+PASS  Cancelled booking frees the slot
+PASS  The booking that covers this moment is found
+PASS  Another customer cannot start a game on the booked table
+PASS  A walk-in guest cannot take the booked table either
+PASS  Other tables are not blocked by this booking
+PASS  The customer who booked can start the game
+PASS  After the booking is cancelled anyone can play
+PASS  Change password: a wrong current password is rejected
+PASS  Change password: the two new passwords must match
+PASS  Change password: a short new password is rejected
+PASS  Change password: the new password must be different
+PASS  After the change the new password logs in
+PASS  ... and the old password does not
+PASS  The password can be changed back
+PASS  A customer with games is NOT deleted (bills must stay)
+PASS  A new customer with no history is deleted
+PASS  A walk-in guest row is never deleted
+PASS  Shift started
+PASS  Shift ended and listed
+PASS  Validator accepts a good phone number
+PASS  Validator rejects a short phone number
+PASS  Validator rejects letters in a phone number
+PASS  Validator rejects an empty name
+PASS  Validator rejects digits in a person's name
+PASS  Validator accepts 'Arun Kumar'
+PASS  Validator rejects a wrong date format
+PASS  Validator accepts yyyy-MM-dd
+PASS  Validator rejects a past booking date
+PASS  Validator rejects a future expense date
+PASS  Validator rejects amount zero
+PASS  Validator rejects a bad username
+PASS  InvalidInputException is a ClubException
+PASS  BusinessException is a ClubException
+PASS  Staff add-user with a bad username throws InvalidInputException
+PASS  Staff add-user with a duplicate username throws BusinessException
+PASS  Bill and Expense both work as Receiptable (interface)
+PASS  The saved club name and phone are printed on the bill
+PASS  The saved club name is printed on the expense voucher
+PASS  After reset the default club name is used again
+PASS  Appearance settings are saved (theme, text size, notifications)
+PASS  Reset gives the default look (Green Baize, 14, notifications on)
+PASS  CSV export writes header and a quoted row
+PASS  CSV export to a missing folder throws IOException
+PASS  Logger file cue147.log exists
+PASS  Staff cannot correct financial records, owner can
+PASS  A table can be put under maintenance
+PASS  A game cannot be started on a table under maintenance
+PASS  Dashboard: a table under maintenance is not counted as available
+PASS  A table back in service is AVAILABLE again
+PASS  Staff can cancel a game that was just started
+PASS  A cancelled game frees the table and creates no bill
+PASS  Cancelling needs a reason
+PASS  Staff cannot cancel a game that ran for 40 minutes
+PASS  The owner can cancel it
+PASS  Cancelling a game that is not running is rejected
+PASS  Cancelled games are not counted in the usage report
+PASS  A start time in the future is rejected
+PASS  A start time more than 12 hours ago is rejected
+PASS  After moving the start 70 minutes back: 1h10m pool (men) = 270 + 22.50 -> Rs.290
+PASS  The bill remembers who ended the game
+PASS  The paid bill remembers who received the money
+PASS  Paying the same bill again is rejected
+PASS  An unknown payment method is rejected
+PASS  A game ended by accident can be reopened: the table is OCCUPIED again
+PASS  The old bill is CANCELLED (kept, not deleted) and its payment CANCELLED
+PASS  The extra visit was taken back
+PASS  Ending the reopened game makes a NEW bill with a new number
+PASS  The unpaid list shows live bills only
+PASS  A paid bill cannot be reopened
+PASS  A cancelled bill cannot be reopened
+PASS  Reopen is refused when the table is in use again
+PASS  ... and nothing was changed by the refused reopen
+PASS  MySQL itself refuses a second live bill for the same session
+PASS  Staff cannot reopen a game that ended 2 hours ago
+PASS  The owner can reopen an old game
+PASS  Staff cannot cancel a bill
+PASS  Cancelling a bill needs a reason
+PASS  The owner cancels an unpaid bill: bill CANCELLED with reason, payment CANCELLED
+PASS  Cancelling an unpaid bill does not change revenue
+PASS  Cancelling a bill twice is rejected
+PASS  A cancelled bill cannot be paid
+PASS  A PAID bill that is cancelled becomes REFUNDED
+PASS  The refund is taken out of today's revenue
+PASS  The refund is taken out of the customer's total spending
+PASS  The dashboard shows the new revenue
+PASS  Cancelled bills are not in the 'billed' total of reports
+PASS  Staff cannot change a payment method
+PASS  An unpaid bill has no payment method to change
+PASS  Changing to the same method is rejected
+PASS  The owner can correct UPI to CASH
+PASS  An expense can be edited
+PASS  The edited values are saved (category, amount, method, description)
+PASS  Dashboard monthly expenses follow the edit (-1200.50 + 999.00)
+PASS  Editing an unknown expense changes nothing
+PASS  No active game is left behind by the tests
+174 passed, 0 failed
+=== Restart test (two separate programs) ===
+Program 1: game started on PS5 Station 1, now closing the program...
+PASS  Program 2: the running game survived the restart (table is OCCUPIED, 1 active session)
+PASS  Program 2: the game can be ended and billed after the restart (120.00)
+=== Screen smoke test (opens every screen as owner and staff) ===
+PASS  Owner: all 10 screens open without an error
+PASS  Owner sees Edit, Delete, Export on Expenses
+PASS  Owner sees Maintenance and Remove Table on Tables
+PASS  Owner sees Cancel Bill and Change Method on Billing
+PASS  Owner sees Reopen Game
+PASS  Staff: the 7 allowed screens open without an error
+PASS  Staff does NOT get Expenses buttons
+PASS  Staff does NOT get Maintenance / Remove Table
+PASS  Staff does NOT get Cancel Bill / Change Method
+PASS  Staff still gets Reopen Game, Record Payment and Start Game
+10 passed, 0 failed
+=== GUI click test (clicks the real buttons of the real screens) ===
+PASS  G01 Login - Login with empty fields  ->  Pop-up: "Username is required."
+PASS  G02 Login - Login with a wrong password  ->  Pop-up: "Wrong username or password."
+PASS  G03 Login - Wrong role chosen (Staff radio for the owner account)  ->  Pop-up: "This account is a OWNER account. Please choose the correct role."
+PASS  G04 Login - Show password check box  ->  Password shown, then hidden again
+PASS  G05 Login - Clear button  ->  Both boxes empty
+PASS  G06 Login - Forgot password button  ->  Pop-up: "Passwords are stored as secure hashes, so they cannot be shown. Ask th..."
+PASS  G07 Login - Login as Owner with the correct password  ->  Main window opened: "CUE 147 - Snooker & Pool Club"
+PASS  G08 Navigation - Sidebar button: Dashboard  ->  Status bar shows "Viewing: Dashboard"
+PASS  G09 Navigation - Sidebar button: Tables  ->  Status bar shows "Viewing: Tables"
+PASS  G10 Navigation - Sidebar button: Customers  ->  Status bar shows "Viewing: Customers"
+PASS  G11 Navigation - Sidebar button: Bookings  ->  Status bar shows "Viewing: Bookings"
+PASS  G12 Navigation - Sidebar button: Billing  ->  Status bar shows "Viewing: Billing"
+PASS  G13 Navigation - Sidebar button: Membership  ->  Status bar shows "Viewing: Membership"
+PASS  G14 Navigation - Sidebar button: Expenses  ->  Status bar shows "Viewing: Expenses"
+PASS  G15 Navigation - Sidebar button: Reports  ->  Status bar shows "Viewing: Reports"
+PASS  G16 Navigation - Sidebar button: Staff  ->  Status bar shows "Viewing: Staff"
+PASS  G17 Navigation - Sidebar button: Settings  ->  Status bar shows "Viewing: Settings"
+PASS  G18 Customers - Add customer with a bad phone number  ->  Pop-up: "Phone number must be exactly 10 digits."; customer count unchanged (2)
+PASS  G19 Customers - Add customer with an empty name  ->  Pop-up: "Name is required."
+PASS  G20 Customers - Add a valid customer (Rahul Sharma, Men)  ->  Pop-up: "Customer Rahul Sharma registered."; found in MySQL and in the table
+PASS  G21 Customers - Add a second customer (Priya Nair, Ladies)  ->  Saved: Priya Nair, gender Ladies
+PASS  G22 Customers - Add customer with a phone number that already exists  ->  Pop-up: "This phone number is already registered."; still only one row in MySQL
+PASS  G23 Customers - Search for 'Rahul'  ->  Table shows 1 row: Rahul Sharma
+PASS  G24 Customers - Show All button  ->  Table shows 4 rows (2 walk-in guests + 2 customers)
+PASS  G25 Customers - History button without selecting a customer  ->  Pop-up: "Select a customer in the table first."
+PASS  G26 Customers - History of a customer  ->  History window opened for Rahul Sharma and was closed
+PASS  G27 Customers - Delete a new customer who never played (owner)  ->  Question: "Delete customer Temp Person? This cannot be undone."; after Yes the customer is gone from MySQL and the table
+PASS  G28 Customers - Delete the walk-in guest row  ->  Pop-up: "The built-in walk-in guest cannot be deleted."
+PASS  G29 Sessions - Start Game on Pool Table 1 for Rahul Sharma  ->  Pop-up: "Game started on Pool Table 1 Player: Rahul Sharma Rate: ₹270 / hour"; MySQL: Pool Table 1 = OCCUPIED, player Rahul Sharma, 1 active session
+PASS  G30 Sessions - Running timer on the table card  ->  Card shows a live timer (Running: 00:00:xx)
+PASS  G31 Sessions - Dashboard shows the active session  ->  Dashboard query: active 1, occupied 1, available 4 of 5
+PASS  G32 Payments - End Game, then pay by Cash  ->  Pop-up: "Payment of ₹270.00 received by CASH."; MySQL: bill CUE20261118-0001 = Rs. 270.00, PAID (CASH), received by Club Owner
+PASS  G33 Sessions - Table is free again after the game  ->  MySQL: Pool Table 1 = AVAILABLE
+PASS  G34 Payments - Second game: Priya (Ladies) pays by UPI  ->  MySQL: bill CUE20261118-0002 = Rs. 220.00, PAID (UPI)
+PASS  G35 Tables - Add Table (Pool Table 9)  ->  MySQL now has Pool Table 9 (6 tables)
+PASS  G36 Tables - Remove Table (Pool Table 9, no history)  ->  Table removed; MySQL has 5 tables again
+PASS  G37 Tables - Maintenance on, then off (Pool Table 3)  ->  Status MAINTENANCE (Start Game disabled), then AVAILABLE again
+PASS  G38 Billing - Bill list shows both bills  ->  Billing table shows 2 bills
+PASS  G39 Billing - Cancel Bill (refund Priya's paid bill)  ->  MySQL: bill CANCELLED, payment REFUNDED, reason kept; revenue 490.00 -> 270.00
+PASS  G40 Billing - Search bills by customer name  ->  Search shows 1 bill; Refresh shows all again
+PASS  G41 Billing - Cancel Bill without selecting a bill  ->  Pop-up: "Select a bill in the table first."
+PASS  G42 Expenses - Add expense with amount 0  ->  Pop-up: "Amount must be more than zero."
+PASS  G43 Expenses - Add expense (Rent, Rs. 1500, Cash)  ->  Pop-up: "Expense saved: RENT ₹1,500.00"; MySQL has 1 expense
+PASS  G44 Expenses - Edit the expense (amount 2000)  ->  MySQL amount = 2000.00
+PASS  G45 Dashboard - Dashboard figures after the sales and the expense  ->  Revenue 270.00, expenses 2000.00, estimated profit -1730.00
+PASS  G46 Expenses - Delete: press Cancel in the question  ->  Question: "Are you sure you want to delete this exp..."; after Cancel MySQL still has 1 expense
+PASS  G47 Expenses - Delete: press Yes in the question  ->  MySQL has 0 expenses; dashboard today's expenses = 0.00
+PASS  G48 Bookings - Book a table (defaults: today 19:00, 1 hour)  ->  Pop-up: "Booking confirmed! C..."; MySQL has 1 booking
+PASS  G49 Bookings - Cancel the booking  ->  MySQL booking status = CANCELLED
+PASS  G50 Bookings - Book 19:00, then try 19:30 on the same table  ->  Pop-up: "Pool Table 1 already has a booking that overlaps 19:30 (1.0 h) on 2026-11-18."; MySQL still has only 1 confirmed booking (then cancelled)
+PASS  G51 Bookings - Priya books Pool Table 1 from now; Rahul tries to play there  ->  Pop-up: "Pool Table 1 is booked for Priya Nair from 01:02 to 02:02. Start the game for Priya Nair, or cancel the booking first."; no game started (booking cancelled afterwards)
+PASS  G52 Membership - Add a Monthly member  ->  Pop-up: "Priya Nair is now a Monthly member (5% off)."; MySQL: Priya Nair ACTIVE, 5.00% until 2026-12-18
+PASS  G53 Settings - Change Pool price for Men to Rs. 280  ->  MySQL: Pool / Men = Rs. 280.00
+PASS  G54 Settings - Change the price back to Rs. 270  ->  MySQL: Pool / Men = Rs. 270.00
+PASS  G55 Settings - Appearance: Midnight Blue, text size 16, Apply  ->  Pop-up: "Saved: Midnight Blue, text size 16. Close CUE 147 and start it again to see the new look."; saved theme = Midnight Blue, size = 16
+PASS  G56 Settings - Appearance: switch notifications OFF  ->  Top bar: "Notifications (off)"; pop-up: "Notifications are switched off. Turn them on in Settings > Appearance."
+PASS  G57 Settings - Appearance: switch notifications ON again  ->  Top bar: "Notifications (0)"
+PASS  G58 Settings - Club Settings: save the club name and phone  ->  Pop-up: "Club settings saved on this computer."; saved club name = CUE 147 Test Club
+PASS  G59 Billing - View / Print Bill: print the bill to a file  ->  Bill shows "CUE 147 TEST CLUB"; printed to docs/test-results/sample-bill-print.ps (4033 bytes, starts with %!PS)
+PASS  G60 Reports - Daily Report button  ->  Pop-up: "DAILY REPORT Revenue: ₹270.00 Games played: 1 Busiest table: Pool Table 1"
+PASS  G61 Staff - Change My Password with a wrong current password  ->  Pop-up: "The current password is wrong."; owner123 still works
+PASS  G62 Staff - Change My Password (owner123 -> owner456)  ->  Pop-up: "Your password has been changed. Use the new password next time you log in."; owner456 logs in, owner123 refused (then changed back)
+PASS  G63 Right-click menu - Right-click a table card (Pool Table 2)  ->  Menu items: [Start Game, End Game, Cancel Game (started by mistake), Adjust Start Time, View Details]
+PASS  G64 Right-click menu - Right-click > View Details  ->  Pop-up: "Pool Table 2 Type: Pool Status: AVAILABLE Price (Men): ₹270 / hour Price (L..."
+PASS  G65 Right-click menu - Right-click > Start Game (Pool Table 2, Rahul Sharma)  ->  Card shows OCCUPIED; MySQL active sessions = 1
+PASS  G66 Corrections - Right-click > Adjust Start Time (20 minutes earlier)  ->  MySQL start time is 20 minutes ago; card timer shows about 00:20
+PASS  G67 Corrections - Right-click > Cancel Game (started by mistake)  ->  No new bill (2 bills before and after); Pool Table 2 is AVAILABLE again
+PASS  G68 Corrections - Reopen Game after an accidental End Game (bill not paid)  ->  Pop-up: "The game is running again on Pool Table 2. See the Tables screen."; MySQL: bill CUE20261118-0003 CANCELLED, Pool Table 2 ACTIVE again
+PASS  G69 Corrections - End the reopened game and pay  ->  New bill CUE20261118-0004 PAID (CASH); cancelled bills kept in history: 1
+PASS  G70 Auto refresh - Another counter starts a game (directly in MySQL)  ->  Card changed to OCCUPIED by itself after about 2 seconds (auto refresh every 15 seconds)
+PASS  G71 Dashboard - Notifications button  ->  Pop-up: "• No new notifications"
+PASS  G72 Navigation - Menu: Help > About Cue 147  ->  Pop-up: "CUE 147 - Snooker & Pool Club Management..."
+PASS  G73 Navigation - Toolbar button: New Customer  ->  Customers screen is shown
+PASS  G74 Customers - Delete a customer who has bills (Rahul Sharma)  ->  Pop-up: "Rahul Sharma has games, bookings or a membership, so the record is kept (the bills must stay). Nothing was deleted."; Rahul is still in MySQL
+PASS  G75 Logout - Logout button, answer Yes  ->  Login window is shown again
+PASS  G76 Permissions - Login as Staff  ->  Main window opened for staff
+PASS  G77 Permissions - Staff sidebar has no Expenses, Reports or Settings  ->  Sidebar: [Dashboard, Tables, Customers, Bookings, Billing, Membership, Staff] (no Expenses, Reports, Settings); the Reports menu is greyed out
+PASS  G78 Permissions - Staff Tables screen has no Add / Remove / Maintenance  ->  Add, Edit, Remove, Maintenance buttons are not shown
+PASS  G79 Permissions - Staff runs a game and takes UPI payment  ->  MySQL: bill CUE20261118-0006 PAID (UPI); served by Counter Staff, received by Counter Staff
+PASS  G80 Permissions - Staff Customers screen has no Delete button  ->  Delete is not shown for staff; Add is shown
+PASS  G81 Permissions - Staff can change their own password  ->  Change My Password is shown for staff
+PASS  G82 Permissions - Staff Billing screen has no Cancel Bill / Change Method  ->  Cancel Bill and Change Method hidden; Reopen Game shown
+PASS  G83 Logout - Staff logs out  ->  Login window is shown again
+83 passed, 0 failed  (results saved in docs/test-results/gui-click-test-results.tsv)
+=== Appearance test (a new program reads the saved look) ===
+PASS  The saved look is read back: Midnight Blue, text size 16
+PASS  After start-up the accent colour is Midnight Blue
+PASS  After start-up the text is bigger (body 16, title 30)
+PASS  The main window opens with the new look (screenshot 15-appearance-midnight-blue.png)
+PASS  After Reset the normal look is used again (Green Baize, 14)
+5 passed, 0 failed
+=== Deployment test (auto-start and backup) ===
+PASS  MySQL was stopped, and ensure-mysql.sh started it again by itself
+PASS  backup-db.sh saved today's backup with all tables (backups/cue147-2026-11-18.sql)
+=== END (exit code 0) ===

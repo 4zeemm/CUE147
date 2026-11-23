@@ -1,0 +1,4 @@
+# Where the MySQL database is.
+# Use 127.0.0.1 on the computer that runs MySQL.
+# On any other computer, put the address of the club server here.
+db.host=127.0.0.1
