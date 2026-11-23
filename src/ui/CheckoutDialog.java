@@ -5,7 +5,8 @@ import dao.StaffMemberDAO;
 import exception.BusinessException;
 import exception.InvalidInputException;
 import model.Bill;
-import model.PaymentPart;
+import model.MenuItem;
+import model.OrderItem;
 import model.StaffMember;
 import service.BillService;
 import service.Checkout;
@@ -24,7 +25,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
- * The one-screen checkout: table time, discount, payments (one or several), "Billed by"
+ * The one-screen checkout: table time, food & drinks, discount, payments (one or several), "Billed by"
  * and the running total are all in this window. The money rules are in service.Checkout.
  *
  * Quickest way for staff: choose "Billed by" and press Pay Cash or Pay UPI.
@@ -50,10 +51,9 @@ public class CheckoutDialog extends JDialog {
     private final JLabel remainingLabel = Theme.label("", Theme.TITLE, Theme.RED);
     private final JLabel messageLabel = Theme.label(" ", Theme.BOLD, Theme.RED);
 
-    private final JComboBox<String> payMethod = Theme.combo("Cash", "UPI");
-    private final JSpinner payAmount = Theme.numberSpinner(0, 0, 1_000_000, 10);
-    private final DefaultListModel<String> partsModel = new DefaultListModel<>();
-    private final JList<String> partsList = new JList<>(partsModel);
+    private final DefaultTableModel itemsModel = Theme.tableModel("Item", "Amount");
+    private final JTable itemsTable = new JTable(itemsModel);
+    private PaymentPanel paymentPanel;
     private final JComboBox<StaffMember> billedBy = new JComboBox<>();
     private final RoundButton completeButton = Theme.button("Complete Bill", Theme.GREEN, e -> complete());
 
@@ -62,6 +62,10 @@ public class CheckoutDialog extends JDialog {
         this.frame = frame;
         this.bill = bill;
         this.checkout = billService.startCheckout(bill);
+        discountType.setName("discountType");
+        discountValue.setName("discountValue");
+        occasion.setName("occasion");
+        billedBy.setName("billedBy");
 
         JPanel root = Theme.panel(new BorderLayout(16, 12));
         root.setBorder(new EmptyBorder(16, 18, 14, 18));
@@ -88,7 +92,19 @@ public class CheckoutDialog extends JDialog {
 
     /** Opens the checkout for an unpaid bill. Returns true if the bill was paid or saved. */
     public static boolean open(MainFrame frame, Bill bill) {
-        CheckoutDialog d = new CheckoutDialog(frame, bill);
+        Bill fresh;
+        try {
+            fresh = new BillDAO().findById(bill.getId());   // always with its food & drinks and the latest status
+        } catch (SQLException e) {
+            AppLogger.error("Could not load the bill", e);
+            Theme.error(frame, "Could not load the bill:\n" + e.getMessage());
+            return false;
+        }
+        if (fresh == null || fresh.isCancelled() || fresh.isPaid()) {
+            Theme.error(frame, "This bill is already paid or cancelled (maybe on another computer).");
+            return true;
+        }
+        CheckoutDialog d = new CheckoutDialog(frame, fresh);
         d.setVisible(true);
         return d.changed;
     }
@@ -105,14 +121,14 @@ public class CheckoutDialog extends JDialog {
     }
 
     private JPanel buildLeft() {
-        // what is charged
-        DefaultTableModel items = Theme.tableModel("Item", "Amount");
-        String tableLine = "Table time  " + bill.getDurationText() + " @ " + Theme.money0(bill.getHourlyRate()) + "/h";
-        if (bill.getDiscountPercent().signum() > 0) tableLine += "  (member " + bill.getDiscountPercent().stripTrailingZeros().toPlainString() + "% off)";
-        items.addRow(new Object[]{tableLine, Theme.money(bill.getTableAmount())});
-        JTable itemsTable = new JTable(items);
+        // what is charged: table time, then food & drinks (they can be added or removed here)
         Theme.styleTable(itemsTable);
         itemsTable.getColumnModel().getColumn(0).setPreferredWidth(310);
+        JPanel itemsRow = Theme.panel(new BorderLayout(0, 6));
+        itemsRow.add(new ItemAdder(this::addItem), BorderLayout.NORTH);   // full width, so item names are readable
+        JPanel removeRow = Theme.panel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        removeRow.add(Theme.button("Remove Item", Theme.NEUTRAL, e -> removeItem()));
+        itemsRow.add(removeRow, BorderLayout.SOUTH);
 
         // discount
         JPanel discount = Theme.panel(new GridBagLayout());
@@ -128,7 +144,10 @@ public class CheckoutDialog extends JDialog {
         card.setBorder(new EmptyBorder(14, 14, 14, 14));
         card.add(Theme.scroll(itemsTable), BorderLayout.CENTER);
         JPanel south = Theme.panel(new BorderLayout(0, 8));
-        south.add(discount, BorderLayout.NORTH);
+        JPanel addAndDiscount = Theme.panel(new BorderLayout(0, 8));
+        addAndDiscount.add(itemsRow, BorderLayout.NORTH);
+        addAndDiscount.add(discount, BorderLayout.SOUTH);
+        south.add(addAndDiscount, BorderLayout.NORTH);
         south.add(staff, BorderLayout.SOUTH);
         card.add(south, BorderLayout.SOUTH);
         return card;
@@ -142,27 +161,12 @@ public class CheckoutDialog extends JDialog {
         Theme.addRow(totals, 3, "Paid", paidLabel);
         Theme.addRow(totals, 4, "Remaining", remainingLabel);
 
-        JPanel addRow = Theme.panel(new FlowLayout(FlowLayout.LEFT, 6, 0));
-        payAmount.setPreferredSize(new Dimension(120, 34));
-        addRow.add(payMethod);
-        addRow.add(payAmount);
-        addRow.add(Theme.button("Add Payment", Theme.BLUE, e -> addPayment()));
-        addRow.add(Theme.button("Remove", Theme.NEUTRAL, e -> removePayment()));
-
-        partsList.setVisibleRowCount(3);
-        partsList.setBackground(Theme.FIELD);
-        partsList.setForeground(Theme.TEXT);
-        partsList.setFont(Theme.BODY);
-
-        JPanel payments = Theme.panel(new BorderLayout(0, 6));
-        payments.add(Theme.label("Payments (for a split bill add each part)", Theme.BOLD, Theme.MUTED), BorderLayout.NORTH);
-        payments.add(addRow, BorderLayout.CENTER);
-        payments.add(Theme.scroll(partsList), BorderLayout.SOUTH);
+        paymentPanel = new PaymentPanel(checkout, messageLabel, this::updateTotals);
 
         RoundedPanel card = new RoundedPanel(new BorderLayout(0, 10));
         card.setBorder(new EmptyBorder(14, 14, 14, 14));
         card.add(totals, BorderLayout.NORTH);
-        card.add(payments, BorderLayout.CENTER);
+        card.add(paymentPanel, BorderLayout.CENTER);
         card.add(messageLabel, BorderLayout.SOUTH);
         return card;
     }
@@ -235,11 +239,9 @@ public class CheckoutDialog extends JDialog {
         }
     }
 
-    private void addPayment() {
-        String method = payMethod.getSelectedIndex() == 0 ? "CASH" : "UPI";
-        BigDecimal amount = BigDecimal.valueOf(((Number) payAmount.getValue()).doubleValue()).setScale(2, RoundingMode.HALF_UP);
+    private void addItem(MenuItem item, int quantity) {
         try {
-            checkout.addPayment(method, amount);
+            checkout.addItem(OrderItem.of(item, quantity));
             messageLabel.setText(" ");
         } catch (InvalidInputException e) {
             messageLabel.setText(firstLine(e.getMessage()));
@@ -247,23 +249,22 @@ public class CheckoutDialog extends JDialog {
         updateTotals();
     }
 
-    private void removePayment() {
-        int i = partsList.getSelectedIndex();
-        if (i < 0) i = partsModel.size() - 1;   // nothing selected: remove the last one
-        checkout.removePayment(i);
+    /** Removes the selected food/drink line (the table time itself cannot be removed). */
+    private void removeItem() {
+        int row = itemsTable.getSelectedRow();
+        if (row < 1) { messageLabel.setText("Select a food or drink line to remove (not the table time)."); return; }
+        try {
+            checkout.removeItem(row - 1);
+            messageLabel.setText(" ");
+        } catch (InvalidInputException e) {
+            messageLabel.setText(firstLine(e.getMessage()));
+        }
         updateTotals();
     }
 
     /** Pay Cash / Pay UPI: the rest of the bill is paid with this method and the bill is closed. */
     private void payRest(String method) {
-        if (checkout.getRemaining().signum() > 0) {
-            try {
-                checkout.addPayment(method, checkout.getRemaining());
-            } catch (InvalidInputException e) {
-                messageLabel.setText(firstLine(e.getMessage()));
-                return;
-            }
-        }
+        if (!paymentPanel.payRest(method)) return;
         updateTotals();
         complete();
     }
@@ -312,8 +313,15 @@ public class CheckoutDialog extends JDialog {
         dispose();
     }
 
-    /** Shows the running totals and the payment parts; the amount box always suggests the remaining amount. */
+    /** Shows the charged lines, the running totals and the payment parts. */
     private void updateTotals() {
+        itemsModel.setRowCount(0);
+        String tableLine = "Table time  " + bill.getDurationText() + " @ " + Theme.money0(bill.getHourlyRate()) + "/h";
+        if (bill.getDiscountPercent().signum() > 0) tableLine += "  (member " + bill.getDiscountPercent().stripTrailingZeros().toPlainString() + "% off)";
+        itemsModel.addRow(new Object[]{tableLine, Theme.money(checkout.getTableAmount())});
+        for (OrderItem i : checkout.getItems()) {
+            itemsModel.addRow(new Object[]{i.getName() + "  x" + i.getQuantity() + "  @ " + Theme.money(i.getUnitPrice()), Theme.money(i.getAmount())});
+        }
         subtotalLabel.setText(Theme.money(checkout.getSubtotal()));
         discountLabel.setText("- " + Theme.money(checkout.getDiscountAmount()));
         totalLabel.setText(Theme.money(checkout.getFinalTotal()));
@@ -321,11 +329,7 @@ public class CheckoutDialog extends JDialog {
         BigDecimal remaining = checkout.getRemaining();
         remainingLabel.setText(Theme.money(remaining));
         remainingLabel.setForeground(remaining.signum() == 0 ? Theme.GREEN : Theme.RED);
-        partsModel.clear();
-        for (PaymentPart p : checkout.getParts()) {
-            partsModel.addElement((p.getMethod().equals("CASH") ? "Cash" : "UPI") + "   " + Theme.money(p.getAmount()));
-        }
-        payAmount.setValue(remaining.doubleValue());
+        if (paymentPanel != null) paymentPanel.refresh();
         completeButton.setEnabled(checkout.isFullyPaid());
     }
 

@@ -32,6 +32,7 @@ public class CustomersPanel extends ScreenPanel {
     private final JTextField phoneField = Theme.field(16);
     private final JComboBox<String> genderBox = Theme.combo("Men", "Ladies");
     private final JLabel countLabel = Theme.label("", Theme.SMALL, Theme.MUTED);
+    private final JLabel membershipLabel = Theme.label("-", Theme.BOLD, Theme.MUTED);
 
     public CustomersPanel(MainFrame frame) {
         super(frame);
@@ -83,6 +84,7 @@ public class CustomersPanel extends ScreenPanel {
         Theme.addRow(form, 1, "Phone", phoneField);
         Theme.addRow(form, 2, "Gender", genderBox);
         Theme.addRow(form, 3, "", Theme.label("Gender decides the hourly price", Theme.SMALL, Theme.MUTED));
+        Theme.addRow(form, 4, "Membership", membershipLabel);
         JPanel formWrap = Theme.panel(new BorderLayout());
         formWrap.add(form, BorderLayout.NORTH);
         card.add(formWrap, BorderLayout.CENTER);
@@ -129,6 +131,22 @@ public class CustomersPanel extends ScreenPanel {
         nameField.setText(c.getName());
         phoneField.setText(c.getPhone());
         genderBox.setSelectedItem(c.getGenderLabel());
+        showMembership(c);
+    }
+
+    /** The membership of the selected customer, with a warning colour when it has ended or ends soon. */
+    private void showMembership(model.Customer c) {
+        membershipLabel.setForeground(Theme.MUTED);
+        if (c.isWalkIn()) { membershipLabel.setText("<html>Walk-in guest</html>"); return; }
+        try {
+            model.Membership m = new dao.MembershipDAO().findLatestForCustomer(c.getId());
+            if (m == null) { membershipLabel.setText("<html>No membership</html>"); return; }
+            membershipLabel.setText("<html>" + m.getStatusText() + "</html>");   // html = wraps long text in the narrow card
+            membershipLabel.setForeground(m.needsWarning() ? (m.getDisplayStatus().equals("EXPIRED") ? Theme.RED : Theme.AMBER)
+                    : m.getDisplayStatus().equals("ACTIVE") ? Theme.GREEN : Theme.MUTED);
+        } catch (SQLException e) {
+            membershipLabel.setText("-");
+        }
     }
 
     private Customer selectedCustomer(boolean showMessage) {
@@ -145,6 +163,8 @@ public class CustomersPanel extends ScreenPanel {
         nameField.setText("");
         phoneField.setText("");
         genderBox.setSelectedIndex(0);
+        membershipLabel.setText("-");
+        membershipLabel.setForeground(Theme.MUTED);
     }
 
     /** Checks the form with the Validator class. Returns true if everything is fine. */

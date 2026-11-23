@@ -14,7 +14,6 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.sql.SQLException;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -72,6 +71,11 @@ public class CustomerPicker extends JPanel {
         runSearch();
     }
 
+    /** Runs the action every time another customer is chosen. */
+    public void onSelect(Runnable action) {
+        list.addListSelectionListener(e -> { if (!e.getValueIsAdjusting()) action.run(); });
+    }
+
     /** The customer chosen in the list, or null. */
     public Customer getSelectedCustomer() { return list.getSelectedValue(); }
 
@@ -107,20 +111,13 @@ public class CustomerPicker extends JPanel {
         if (c.isWalkIn()) { membership.setText("Walk-in guest (no membership)"); membership.setForeground(Theme.MUTED); return; }
         try {
             Membership m = membershipDAO.findLatestForCustomer(c.getId());
-            DateTimeFormatter f = DateTimeFormatter.ofPattern("dd MMM yyyy");
-            if (m == null || m.getDisplayStatus().equals("CANCELLED")) {
+            if (m == null) {
                 membership.setText("No membership");
                 membership.setForeground(Theme.MUTED);
-            } else if (m.getDisplayStatus().equals("EXPIRED")) {
-                membership.setText("Membership EXPIRED on " + m.getExpiryDate().format(f));
-                membership.setForeground(Theme.RED);
-            } else if (m.getDaysLeft() <= 7) {
-                membership.setText("Member, " + m.getDiscountPercent().stripTrailingZeros().toPlainString() + "% off - ENDS SOON: "
-                        + m.getExpiryDate().format(f) + " (" + m.getDaysLeft() + " days)");
-                membership.setForeground(Theme.AMBER);
             } else {
-                membership.setText("Member until " + m.getExpiryDate().format(f) + "  (" + m.getDiscountPercent().stripTrailingZeros().toPlainString() + "% off)");
-                membership.setForeground(Theme.GREEN);
+                membership.setText(m.getStatusText());
+                membership.setForeground(m.needsWarning() ? (m.getDisplayStatus().equals("EXPIRED") ? Theme.RED : Theme.AMBER)
+                        : m.getDisplayStatus().equals("ACTIVE") ? Theme.GREEN : Theme.MUTED);
             }
         } catch (SQLException e) {
             AppLogger.error("Could not load the membership", e);

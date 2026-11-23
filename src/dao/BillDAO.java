@@ -2,6 +2,7 @@ package dao;
 
 import database.DBConnection;
 import model.Bill;
+import model.OrderItem;
 import model.PaymentPart;
 
 import java.math.BigDecimal;
@@ -44,6 +45,7 @@ public class BillDAO {
         bill.setCheckoutDetails(rs.getBigDecimal("table_amount"), rs.getString("bill_discount_type"),
                 rs.getBigDecimal("bill_discount_value"), rs.getBigDecimal("bill_discount_amount"), rs.getString("discount_occasion"),
                 rs.wasNull() ? null : staffId, rs.getString("billed_by_name"));
+        bill.setItemsAmount(rs.getBigDecimal("items_amount"));
         return bill;
     }
 
@@ -57,6 +59,7 @@ public class BillDAO {
                 bill = readBill(rs);
             }
             bill.setPaymentParts(findParts(con, billId));
+            bill.setItems(OrderItemDAO.findBySession(con, bill.getSessionId()));
             return bill;
         }
     }
@@ -82,13 +85,13 @@ public class BillDAO {
      */
     public void completeCheckout(int billId, String discountType, BigDecimal discountValue, BigDecimal discountAmount,
                                  String occasion, BigDecimal finalAmount, String methodLabel, List<PaymentPart> parts,
-                                 int billedByStaffId, int receivedBy) throws SQLException {
+                                 List<OrderItem> items, BigDecimal itemsAmount, int billedByStaffId, int receivedBy) throws SQLException {
         try (Connection con = DBConnection.getConnection()) {
             con.setAutoCommit(false);
             try {
-                int paymentId, customerId;
+                int paymentId, customerId, sessionId;
                 try (PreparedStatement ps = con.prepareStatement(
-                        "SELECT p.payment_id, s.customer_id FROM payments p JOIN bills b ON b.bill_id = p.bill_id "
+                        "SELECT p.payment_id, s.customer_id, s.session_id FROM payments p JOIN bills b ON b.bill_id = p.bill_id "
                         + "JOIN sessions s ON s.session_id = b.session_id "
                         + "WHERE p.bill_id = ? AND p.status = 'PENDING' AND b.status = 'ACTIVE' FOR UPDATE")) {
                     ps.setInt(1, billId);
@@ -96,9 +99,11 @@ public class BillDAO {
                         if (!rs.next()) throw new SQLException("Bill is already paid or cancelled");
                         paymentId = rs.getInt(1);
                         customerId = rs.getInt(2);
+                        sessionId = rs.getInt(3);
                     }
                 }
-                updateBillCheckout(con, billId, discountType, discountValue, discountAmount, occasion, finalAmount, billedByStaffId);
+                OrderItemDAO.replaceAll(con, sessionId, items);
+                updateBillCheckout(con, billId, discountType, discountValue, discountAmount, occasion, finalAmount, itemsAmount, billedByStaffId);
                 Timestamp now = new Timestamp(System.currentTimeMillis());
                 try (PreparedStatement ps = con.prepareStatement(
                         "UPDATE payments SET amount = ?, method = ?, status = 'PAID', paid_at = ?, received_by = ? WHERE payment_id = ?")) {
@@ -126,7 +131,8 @@ public class BillDAO {
 
     /** "Pay later": keeps the bill UNPAID but saves its discount, total and "Billed by". */
     public void saveForLater(int billId, String discountType, BigDecimal discountValue, BigDecimal discountAmount,
-                             String occasion, BigDecimal finalAmount, int billedByStaffId) throws SQLException {
+                             String occasion, BigDecimal finalAmount, List<OrderItem> items, BigDecimal itemsAmount,
+                             int billedByStaffId) throws SQLException {
         try (Connection con = DBConnection.getConnection()) {
             con.setAutoCommit(false);
             try {
@@ -136,7 +142,14 @@ public class BillDAO {
                     ps.setInt(2, billId);
                     if (ps.executeUpdate() != 1) throw new SQLException("Bill is already paid or cancelled");
                 }
-                updateBillCheckout(con, billId, discountType, discountValue, discountAmount, occasion, finalAmount, billedByStaffId);
+                try (PreparedStatement ps = con.prepareStatement("SELECT session_id FROM bills WHERE bill_id = ?")) {
+                    ps.setInt(1, billId);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        rs.next();
+                        OrderItemDAO.replaceAll(con, rs.getInt(1), items);
+                    }
+                }
+                updateBillCheckout(con, billId, discountType, discountValue, discountAmount, occasion, finalAmount, itemsAmount, billedByStaffId);
                 con.commit();
             } catch (SQLException e) {
                 con.rollback();
@@ -146,21 +159,24 @@ public class BillDAO {
     }
 
     private void updateBillCheckout(Connection con, int billId, String discountType, BigDecimal discountValue, BigDecimal discountAmount,
-                                    String occasion, BigDecimal finalAmount, int billedByStaffId) throws SQLException {
+                                    String occasion, BigDecimal finalAmount, BigDecimal itemsAmount, int billedByStaffId) throws SQLException {
         try (PreparedStatement ps = con.prepareStatement("UPDATE bills SET bill_discount_type = ?, bill_discount_value = ?, "
-                + "bill_discount_amount = ?, discount_occasion = ?, final_amount = ?, billed_by_staff_id = ? WHERE bill_id = ? AND status = 'ACTIVE'")) {
+                + "bill_discount_amount = ?, discount_occasion = ?, final_amount = ?, billed_by_staff_id = ?, items_amount = ? "
+                + "WHERE bill_id = ? AND status = 'ACTIVE'")) {
             ps.setString(1, discountType);
             ps.setBigDecimal(2, discountValue);
             ps.setBigDecimal(3, discountAmount);
             ps.setString(4, occasion == null || occasion.isEmpty() ? null : occasion);
             ps.setBigDecimal(5, finalAmount);
             ps.setInt(6, billedByStaffId);
-            ps.setInt(7, billId);
+            ps.setBigDecimal(7, itemsAmount);
+            ps.setInt(8, billId);
             if (ps.executeUpdate() != 1) throw new SQLException("Bill is already paid or cancelled");
         }
     }
 
-    private void insertParts(Connection con, int paymentId, List<PaymentPart> parts, Timestamp paidAt) throws SQLException {
+    /** Saves the parts of a payment (also used for membership sales). */
+    static void insertParts(Connection con, int paymentId, List<PaymentPart> parts, Timestamp paidAt) throws SQLException {
         try (PreparedStatement ps = con.prepareStatement("INSERT INTO payment_parts (payment_id, method, amount, paid_at) VALUES (?, ?, ?, ?)")) {
             for (PaymentPart part : parts) {
                 ps.setInt(1, paymentId);

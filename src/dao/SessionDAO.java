@@ -92,21 +92,34 @@ public class SessionDAO {
                     ps.setInt(3, sessionId);
                     if (ps.executeUpdate() == 0) throw new SQLException("Session is not active");
                 }
+                // food & drinks ordered during the game are added to the bill
+                BigDecimal itemsAmount;
+                try (PreparedStatement ps = con.prepareStatement(
+                        "SELECT COALESCE(SUM(unit_price * quantity), 0) FROM order_items WHERE session_id = ?")) {
+                    ps.setInt(1, sessionId);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        rs.next();
+                        itemsAmount = rs.getBigDecimal(1);
+                    }
+                }
+                BigDecimal tableAmount = finalAmount;
+                BigDecimal billTotal = tableAmount.add(itemsAmount);
                 // 2. unique bill number like CUE20261104-0003
                 String billNumber = nextBillNumber(con, endTime.toLocalDate());
                 int billId;
                 try (PreparedStatement ps = con.prepareStatement(
-                        "INSERT INTO bills (bill_number, session_id, billed_minutes, hourly_rate, subtotal, discount_percent, final_amount, created_at, table_amount) "
-                        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", Statement.RETURN_GENERATED_KEYS)) {
+                        "INSERT INTO bills (bill_number, session_id, billed_minutes, hourly_rate, subtotal, discount_percent, final_amount, created_at, table_amount, items_amount) "
+                        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", Statement.RETURN_GENERATED_KEYS)) {
                     ps.setString(1, billNumber);
                     ps.setInt(2, sessionId);
                     ps.setInt(3, billedMinutes);
                     ps.setBigDecimal(4, rate);
                     ps.setBigDecimal(5, subtotal);
                     ps.setBigDecimal(6, discountPercent);
-                    ps.setBigDecimal(7, finalAmount);
+                    ps.setBigDecimal(7, billTotal);
                     ps.setTimestamp(8, Timestamp.valueOf(endTime));
-                    ps.setBigDecimal(9, finalAmount);   // table time; extras and the bill discount are added at checkout
+                    ps.setBigDecimal(9, tableAmount);   // table time; the bill discount is added at checkout
+                    ps.setBigDecimal(10, itemsAmount);
                     ps.executeUpdate();
                     try (ResultSet keys = ps.getGeneratedKeys()) {
                         keys.next();
@@ -116,7 +129,7 @@ public class SessionDAO {
                 // 3. a PENDING payment row, waiting for the customer to pay
                 try (PreparedStatement ps = con.prepareStatement("INSERT INTO payments (bill_id, amount) VALUES (?, ?)")) {
                     ps.setInt(1, billId);
-                    ps.setBigDecimal(2, finalAmount);
+                    ps.setBigDecimal(2, billTotal);
                     ps.executeUpdate();
                 }
                 // 4. one more visit for the customer

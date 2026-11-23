@@ -40,6 +40,8 @@ public class Bill implements Receiptable {
     private Integer billedByStaffId;                    // null for bills made before the "Billed by" list
     private String billedBy = "-";
     private List<PaymentPart> paymentParts = new ArrayList<>();
+    private BigDecimal itemsAmount = BigDecimal.ZERO;   // food and drinks (database version 3)
+    private List<OrderItem> items = new ArrayList<>();
 
     public Bill(int id, String billNumber, int sessionId, int billedMinutes, BigDecimal hourlyRate,
                 BigDecimal subtotal, BigDecimal discountPercent, BigDecimal finalAmount, LocalDateTime createdAt) {
@@ -67,6 +69,10 @@ public class Bill implements Receiptable {
     }
 
     public void setPaymentParts(List<PaymentPart> parts) { this.paymentParts = new ArrayList<>(parts); }
+    public void setItemsAmount(BigDecimal itemsAmount) { this.itemsAmount = itemsAmount; }
+    public void setItems(List<OrderItem> items) { this.items = new ArrayList<>(items); }
+    public BigDecimal getItemsAmount() { return itemsAmount; }
+    public List<OrderItem> getItems() { return items; }
 
     public void setSessionDetails(String customerName, String tableName, LocalDateTime start, LocalDateTime end) {
         this.customerName = customerName;
@@ -117,8 +123,8 @@ public class Bill implements Receiptable {
     public String getPaymentMethod() { return paymentMethod; }
     public boolean isPaid() { return paymentStatus.equals("PAID"); }
     public BigDecimal getTableAmount() { return tableAmount; }
-    /** Everything before the bill discount: table time (and later food and drinks). */
-    public BigDecimal getChargesSubtotal() { return tableAmount; }
+    /** Everything before the bill discount: table time + food and drinks. */
+    public BigDecimal getChargesSubtotal() { return tableAmount.add(itemsAmount); }
     public String getBillDiscountType() { return billDiscountType; }
     public BigDecimal getBillDiscountValue() { return billDiscountValue; }
     public BigDecimal getBillDiscountAmount() { return billDiscountAmount; }
@@ -171,6 +177,11 @@ public class Bill implements Receiptable {
         sb.append(String.format("Table time           Rs. %10.2f%n", tableAmount));
         if (discountPercent.signum() > 0) {
             sb.append(String.format("  (member discount %.1f%% included)%n", discountPercent));
+        }
+        for (OrderItem item : items) {
+            String text = item.getName() + " x" + item.getQuantity();
+            if (text.length() > 20) text = text.substring(0, 20);
+            sb.append(String.format("%-20s Rs. %10.2f%n", text, item.getAmount()));
         }
         sb.append(String.format("Subtotal             Rs. %10.2f%n", getChargesSubtotal()));
         sb.append(String.format("Discount           - Rs. %10.2f%n", billDiscountAmount));

@@ -32,8 +32,9 @@ public class BillService {
 
     /** A Checkout for an unpaid bill, with the discount that was saved for it earlier (if any). */
     public Checkout startCheckout(Bill bill) {
-        Checkout c = new Checkout(bill.getChargesSubtotal());
+        Checkout c = new Checkout(bill.getTableAmount());
         try {
+            for (model.OrderItem item : bill.getItems()) c.addItem(item);
             c.setDiscount(Checkout.DiscountType.valueOf(bill.getBillDiscountType()), bill.getBillDiscountValue());
             c.setOccasion(bill.getDiscountOccasion());
         } catch (InvalidInputException e) {
@@ -50,7 +51,8 @@ public class BillService {
         }
         try {
             billDAO.completeCheckout(bill.getId(), c.getDiscountType().name(), c.getDiscountValue(), c.getDiscountAmount(),
-                    c.getOccasion(), c.getFinalTotal(), c.getMethodLabel(), c.getParts(), billedBy.getId(), user.getId());
+                    c.getOccasion(), c.getFinalTotal(), c.getMethodLabel(), c.getParts(), c.getItems(), c.getItemsAmount(),
+                    billedBy.getId(), user.getId());
         } catch (SQLException e) {
             throw alreadyPaid(e);
         }
@@ -62,7 +64,7 @@ public class BillService {
         checkOpen(bill, billedBy);
         try {
             billDAO.saveForLater(bill.getId(), c.getDiscountType().name(), c.getDiscountValue(), c.getDiscountAmount(),
-                    c.getOccasion(), c.getFinalTotal(), billedBy.getId());
+                    c.getOccasion(), c.getFinalTotal(), c.getItems(), c.getItemsAmount(), billedBy.getId());
         } catch (SQLException e) {
             throw alreadyPaid(e);
         }

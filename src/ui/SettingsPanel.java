@@ -1,7 +1,11 @@
 package ui;
 
 import dao.PriceDAO;
+import dao.MembershipPlanDAO;
+import dao.MenuItemDAO;
 import dao.StaffMemberDAO;
+import model.MembershipPlan;
+import model.MenuItem;
 import model.GameTable;
 import model.Price;
 import model.StaffMember;
@@ -26,6 +30,24 @@ public class SettingsPanel extends ScreenPanel {
     private final JTable staffTable = new JTable(staffModel);
     private final List<StaffMember> staffShown = new java.util.ArrayList<>();
     private final JTextField staffName = Theme.field(20);
+
+    // Membership Plans tab
+    private final MembershipPlanDAO planDAO = new MembershipPlanDAO();
+    private final DefaultTableModel planModel = Theme.tableModel("Plan", "Months", "Price", "Member discount");
+    private final JTable planTable = new JTable(planModel);
+    private final List<MembershipPlan> plansShown = new java.util.ArrayList<>();
+    private final JSpinner planMonths = Theme.styleSpinner(new JSpinner(new SpinnerNumberModel(1, 1, 36, 1)));
+    private final JSpinner planPrice = Theme.numberSpinner(0, 0, 1_000_000, 50);
+    private final JSpinner planDiscount = Theme.numberSpinner(0, 0, 100, 1);
+
+    // Food & Drinks Menu tab
+    private final MenuItemDAO menuDAO = new MenuItemDAO();
+    private final DefaultTableModel menuModel = Theme.tableModel("Item", "Category", "Price", "Available");
+    private final JTable menuTable = new JTable(menuModel);
+    private final List<MenuItem> menuShown = new java.util.ArrayList<>();
+    private final JTextField itemName = Theme.field(20);
+    private final JComboBox<String> itemCategory = Theme.combo("Coffee", "Beverages", "Snacks", "Food", "Other");
+    private final JSpinner itemPrice = Theme.numberSpinner(0, 0, 100_000, 5);
 
     private final PriceDAO priceDAO = new PriceDAO();
     private final BillingCalculator calculator = new BillingCalculator();
@@ -67,6 +89,8 @@ public class SettingsPanel extends ScreenPanel {
         tabs.addTab("Appearance", appearanceTab());
         tabs.addTab("Club Settings", clubTab());
         tabs.addTab("Staff List", staffTab());
+        tabs.addTab("Membership Plans", plansTab());
+        tabs.addTab("Food & Drinks Menu", menuTab());
         add(tabs, BorderLayout.CENTER);
         loadClubValues();
         loadAppearance();
@@ -315,6 +339,8 @@ public class SettingsPanel extends ScreenPanel {
     @Override
     public void refresh() {
         loadStaff();
+        loadPlans();
+        loadMenu();
         loadPrices();
         loadClubValues();
         loadAppearance();
@@ -375,6 +401,177 @@ public class SettingsPanel extends ScreenPanel {
             staffDAO.setActive(m.getId(), !m.isActive());
             loadStaff();
             frame.setStatus(m.getName() + (m.isActive() ? " switched off" : " switched on"));
+        } catch (SQLException e) {
+            showDbError(e);
+        }
+    }
+
+    // ---------------- Membership Plans (MySQL table membership_plans) ----------------
+
+    private JPanel plansTab() {
+        Theme.styleTable(planTable);
+        planTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        planTable.getSelectionModel().addListSelectionListener(e -> { if (!e.getValueIsAdjusting()) fillPlanForm(); });
+        planMonths.setName("planMonths");
+        planPrice.setName("planPrice");
+        planDiscount.setName("planDiscount");
+        JPanel content = Theme.panel(new BorderLayout(0, 14));
+        JScrollPane sp = Theme.scroll(planTable);
+        sp.setPreferredSize(new Dimension(0, 120));
+        content.add(sp, BorderLayout.NORTH);
+        JPanel form = Theme.panel(new GridBagLayout());
+        Theme.addRow(form, 0, "Months", planMonths);
+        Theme.addRow(form, 1, "Price (₹)", planPrice);
+        Theme.addRow(form, 2, "Discount on games (%)", planDiscount);
+        Theme.addRow(form, 3, "", Theme.label("Select a plan, change it and press Save Plan. A plan with price ₹0 cannot be sold.",
+                Theme.SMALL, Theme.MUTED));
+        content.add(form, BorderLayout.CENTER);
+        return tab(content, Theme.button("Save Plan", Theme.GREEN, e -> savePlan()));
+    }
+
+    private void loadPlans() {
+        try {
+            int selected = planTable.getSelectedRow();
+            plansShown.clear();
+            plansShown.addAll(planDAO.findAll());
+            planModel.setRowCount(0);
+            for (MembershipPlan p : plansShown) {
+                planModel.addRow(new Object[]{p.getName(), p.getMonths(), Theme.money0(p.getPrice()),
+                        p.getDiscountPercent().stripTrailingZeros().toPlainString() + "%"});
+            }
+            if (selected >= 0 && selected < plansShown.size()) planTable.setRowSelectionInterval(selected, selected);
+        } catch (SQLException e) {
+            showDbError(e);
+        }
+    }
+
+    private void fillPlanForm() {
+        int row = planTable.getSelectedRow();
+        if (row < 0 || row >= plansShown.size()) return;
+        MembershipPlan p = plansShown.get(row);
+        planMonths.setValue(p.getMonths());
+        planPrice.setValue(p.getPrice().doubleValue());
+        planDiscount.setValue(p.getDiscountPercent().doubleValue());
+    }
+
+    private void savePlan() {
+        int row = planTable.getSelectedRow();
+        if (row < 0) { Theme.error(this, "Select a plan in the table first."); return; }
+        MembershipPlan p = plansShown.get(row);
+        BigDecimal price = BigDecimal.valueOf(((Number) planPrice.getValue()).doubleValue()).setScale(2, java.math.RoundingMode.HALF_UP);
+        BigDecimal discount = BigDecimal.valueOf(((Number) planDiscount.getValue()).doubleValue()).setScale(2, java.math.RoundingMode.HALF_UP);
+        int months = ((Number) planMonths.getValue()).intValue();
+        if (price.signum() <= 0) { Theme.error(this, "The price must be more than ₹0."); return; }
+        if (discount.compareTo(new BigDecimal("100")) > 0) { Theme.error(this, "The discount cannot be more than 100%."); return; }
+        try {
+            planDAO.update(p.getId(), months, price, discount);
+            loadPlans();
+            frame.setStatus(p.getName() + " plan saved");
+            Theme.info(this, p.getName() + " plan: " + months + " month(s), " + Theme.money0(price) + ", "
+                    + discount.stripTrailingZeros().toPlainString() + "% off games.\nNew sales use these values; memberships already sold do not change.", "Plan Saved");
+        } catch (SQLException e) {
+            showDbError(e);
+        }
+    }
+
+    // ---------------- Food & Drinks Menu (MySQL table menu_items) ----------------
+
+    private JPanel menuTab() {
+        Theme.styleTable(menuTable);
+        menuTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        menuTable.getSelectionModel().addListSelectionListener(e -> { if (!e.getValueIsAdjusting()) fillMenuForm(); });
+        itemCategory.setEditable(true);   // any category can be typed
+        itemPrice.setName("itemPrice");
+        JPanel content = Theme.panel(new BorderLayout(0, 14));
+        JScrollPane sp = Theme.scroll(menuTable);
+        sp.setPreferredSize(new Dimension(0, 200));
+        content.add(sp, BorderLayout.NORTH);
+        JPanel form = Theme.panel(new GridBagLayout());
+        Theme.addRow(form, 0, "Item name", itemName);
+        Theme.addRow(form, 1, "Category", itemCategory);
+        Theme.addRow(form, 2, "Price (₹)", itemPrice);
+        Theme.addRow(form, 3, "", Theme.label("Items that are sold out or no longer sold are switched off, not deleted. "
+                + "A price change does not change old bills.", Theme.SMALL, Theme.MUTED));
+        content.add(form, BorderLayout.CENTER);
+        return tab(content,
+                Theme.button("Add Item", Theme.GREEN, e -> addMenuItem()),
+                Theme.button("Save Changes", Theme.BLUE, e -> updateMenuItem()),
+                Theme.button("Available On / Off", Theme.NEUTRAL, e -> toggleMenuItem()));
+    }
+
+    private void loadMenu() {
+        try {
+            menuShown.clear();
+            menuShown.addAll(menuDAO.findAll());
+            menuModel.setRowCount(0);
+            for (MenuItem m : menuShown) menuModel.addRow(new Object[]{m.getName(), m.getCategory(), Theme.money(m.getPrice()), m.isAvailable() ? "Yes" : "No"});
+        } catch (SQLException e) {
+            showDbError(e);
+        }
+    }
+
+    private void fillMenuForm() {
+        int row = menuTable.getSelectedRow();
+        if (row < 0 || row >= menuShown.size()) return;
+        MenuItem m = menuShown.get(row);
+        itemName.setText(m.getName());
+        itemCategory.setSelectedItem(m.getCategory());
+        itemPrice.setValue(m.getPrice().doubleValue());
+    }
+
+    /** Checks the three boxes; returns null after showing a message when something is wrong. */
+    private Object[] readMenuForm() {
+        try {
+            String name = Validator.requireLabel(itemName.getText(), "Item name");
+            if (name.length() > 50) throw new InvalidInputException("The item name can have at most 50 characters.");
+            String category = Validator.requireLabel(String.valueOf(itemCategory.getSelectedItem() == null ? "" : itemCategory.getSelectedItem()), "Category");
+            if (category.length() > 30) throw new InvalidInputException("The category can have at most 30 characters.");
+            BigDecimal price = BigDecimal.valueOf(((Number) itemPrice.getValue()).doubleValue()).setScale(2, java.math.RoundingMode.HALF_UP);
+            if (price.signum() <= 0) throw new InvalidInputException("The price must be more than ₹0.");
+            return new Object[]{name, category, price};
+        } catch (InvalidInputException e) {
+            Theme.error(this, e.getMessage());
+            return null;
+        }
+    }
+
+    private void addMenuItem() {
+        Object[] v = readMenuForm();
+        if (v == null) return;
+        try {
+            menuDAO.add((String) v[0], (String) v[1], (BigDecimal) v[2]);
+            itemName.setText("");
+            loadMenu();
+            frame.setStatus(v[0] + " added to the menu");
+        } catch (SQLException e) {
+            if (e.getErrorCode() == 1062) Theme.error(this, "This item is already on the menu.");
+            else showDbError(e);
+        }
+    }
+
+    private void updateMenuItem() {
+        int row = menuTable.getSelectedRow();
+        if (row < 0) { Theme.error(this, "Select an item in the menu first."); return; }
+        Object[] v = readMenuForm();
+        if (v == null) return;
+        try {
+            menuDAO.update(menuShown.get(row).getId(), (String) v[0], (String) v[1], (BigDecimal) v[2]);
+            loadMenu();
+            frame.setStatus(v[0] + " saved");
+        } catch (SQLException e) {
+            if (e.getErrorCode() == 1062) Theme.error(this, "Another item already has this name.");
+            else showDbError(e);
+        }
+    }
+
+    private void toggleMenuItem() {
+        int row = menuTable.getSelectedRow();
+        if (row < 0) { Theme.error(this, "Select an item in the menu first."); return; }
+        MenuItem m = menuShown.get(row);
+        try {
+            menuDAO.setAvailable(m.getId(), !m.isAvailable());
+            loadMenu();
+            frame.setStatus(m.getName() + (m.isAvailable() ? " switched off" : " available again"));
         } catch (SQLException e) {
             showDbError(e);
         }

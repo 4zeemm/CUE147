@@ -4,7 +4,10 @@ import exception.InvalidInputException;
 import org.junit.jupiter.api.Test;
 import service.Checkout.DiscountType;
 
+import model.OrderItem;
+
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -137,5 +140,72 @@ class CheckoutTest {
         c.addPayment("CASH", rs("100"));
         c.addPayment("CASH", rs("400"));
         assertEquals("CASH", c.getMethodLabel());
+    }
+
+    private static OrderItem item(int id, String name, String price, int qty) {
+        return new OrderItem(id, name, "Beverages", rs(price), qty, LocalDateTime.now());
+    }
+
+    @Test
+    void foodAndDrinksAreAddedToTheSubtotal() throws Exception {
+        Checkout c = new Checkout(rs("270"));
+        c.addItem(item(1, "Cold Coffee", "80", 2));
+        c.addItem(item(2, "Chips", "30", 1));
+        same("190", c.getItemsAmount());
+        same("460", c.getSubtotal());
+        same("460", c.getFinalTotal());
+    }
+
+    @Test
+    void theSameItemTwiceBecomesOneLine() throws Exception {
+        Checkout c = new Checkout(rs("270"));
+        c.addItem(item(1, "Cold Coffee", "80", 1));
+        c.addItem(item(1, "Cold Coffee", "80", 2));
+        assertEquals(1, c.getItems().size());
+        assertEquals(3, c.getItems().get(0).getQuantity());
+        same("510", c.getSubtotal());
+    }
+
+    @Test
+    void quantityMustBeBetweenOneAnd99() {
+        Checkout c = new Checkout(rs("270"));
+        assertThrows(InvalidInputException.class, () -> c.addItem(item(1, "Tea", "20", 0)));
+        assertThrows(InvalidInputException.class, () -> c.addItem(item(1, "Tea", "20", 100)));
+    }
+
+    @Test
+    void discountIsTakenFromTableTimePlusFood() throws Exception {
+        Checkout c = new Checkout(rs("270"));
+        c.addItem(item(1, "Cold Coffee", "80", 1));   // subtotal 350
+        c.setDiscount(DiscountType.PERCENT, rs("10"));
+        same("35", c.getDiscountAmount());
+        same("315", c.getFinalTotal());
+    }
+
+    @Test
+    void removingAnItemLowersTheTotal() throws Exception {
+        Checkout c = new Checkout(rs("270"));
+        c.addItem(item(1, "Cold Coffee", "80", 1));
+        c.removeItem(0);
+        same("270", c.getFinalTotal());
+        assertTrue(c.getItems().isEmpty());
+    }
+
+    @Test
+    void anItemCannotBeRemovedWhenPaymentsWouldBeMoreThanTheTotal() throws Exception {
+        Checkout c = new Checkout(rs("270"));
+        c.addItem(item(1, "Cold Coffee", "80", 1));
+        c.addPayment("UPI", rs("300"));
+        assertThrows(InvalidInputException.class, () -> c.removeItem(0));
+        assertEquals(1, c.getItems().size());   // nothing changed
+    }
+
+    @Test
+    void anItemCannotBeRemovedWhenTheFlatDiscountWouldBeTooBig() throws Exception {
+        Checkout c = new Checkout(rs("100"));
+        c.addItem(item(1, "Meal", "200", 1));
+        c.setDiscount(DiscountType.FLAT, rs("150"));
+        assertThrows(InvalidInputException.class, () -> c.removeItem(0));
+        same("150", c.getFinalTotal());
     }
 }

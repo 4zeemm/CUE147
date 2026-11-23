@@ -423,7 +423,7 @@ public class BackendTest {
 
         // ---------- checkout: discounts, split payments, Billed by ----------
         check("The test database is at the newest version", database.SchemaMigrator.migrate() == database.SchemaMigrator.latestVersion()
-                && database.SchemaMigrator.latestVersion() == 2);
+                && database.SchemaMigrator.latestVersion() == 3);
         StaffMemberDAO staffDAO = new StaffMemberDAO();
         check("The Billed-by list starts with the names of the login accounts",
                 staffDAO.findActive().stream().anyMatch(m -> m.getName().equals("Club Owner")) && staffDAO.findActive().stream().anyMatch(m -> m.getName().equals("Counter Staff")));
@@ -480,6 +480,83 @@ public class BackendTest {
                 staffDAO.findActive().stream().noneMatch(m -> m.getId() == kenId) && billDAO.findById(later.getId()).getBilledBy().equals("Ken"));
         check("No active game is left after the checkout tests", new SessionDAO().countActive() == 0);
 
+        // ---------- food & drinks ----------
+        MenuItemDAO menuDAO = new MenuItemDAO();
+        int coffeeId = menuDAO.add("Cold Coffee", "Beverages", new BigDecimal("80"));
+        int chipsId = menuDAO.add("Chips", "Snacks", new BigDecimal("30"));
+        int teaId = menuDAO.add("Masala Tea", "Coffee", new BigDecimal("20"));
+        check("Menu items are saved", menuDAO.findAll().size() == 3);
+        check("A duplicate menu item is refused by MySQL", sqlFails(() -> menuDAO.add("Chips", "Snacks", new BigDecimal("40"))));
+        menuDAO.setAvailable(teaId, false);
+        check("A switched-off item is not offered any more", menuDAO.findAvailable().stream().noneMatch(m -> m.getId() == teaId));
+        MenuItem coffee = menuDAO.findAll().stream().filter(m -> m.getId() == coffeeId).findFirst().get();
+        MenuItem chips = menuDAO.findAll().stream().filter(m -> m.getId() == chipsId).findFirst().get();
+        OrderItemDAO orderDAO = new OrderItemDAO();
+        final int f1 = sessions.startSession(find(tableDAO, "Pool Table 1"), customerDAO.findById(arunId), staff, LocalDateTime.now().minusMinutes(60));
+        orderDAO.add(f1, OrderItem.of(coffee, 2));
+        orderDAO.add(f1, OrderItem.of(chips, 1));
+        List<OrderItem> ordered = orderDAO.findBySession(f1);
+        check("Items ordered during a game are saved with their time", ordered.size() == 2 && ordered.get(0).getAddedAt() != null);
+        orderDAO.delete(ordered.get(1).getId());
+        check("One line can be removed while the game runs", orderDAO.findBySession(f1).size() == 1);
+        menuDAO.update(coffeeId, "Cold Coffee", "Beverages", new BigDecimal("90"));
+        check("A later menu price change does not change what was ordered", same("80", orderDAO.findBySession(f1).get(0).getUnitPrice()));
+        final Bill fb = sessions.endSession(f1, LocalDateTime.now(), staff);
+        check("End Game puts the food on the same bill: 270 + 2 x 80 = Rs. 430",
+                same("160", fb.getItemsAmount()) && same("430", fb.getFinalAmount()) && same("430", fb.getChargesSubtotal()));
+        check("The receipt lists the food", fb.toReceipt().contains("Cold Coffee x2"));
+        Checkout fco = billService.startCheckout(fb);
+        fco.addItem(OrderItem.of(chips, 1));
+        fco.setDiscount(Checkout.DiscountType.FLAT, new BigDecimal("30"));
+        fco.addPayment("UPI", new BigDecimal("200"));
+        fco.addPayment("CASH", fco.getRemaining());
+        BigDecimal revenueBeforeFood = billDAO.revenueBetween(today, today);
+        billService.completeCheckout(fb, fco, staffDAO.findActive().get(0), staff);
+        Bill fbPaid = billDAO.findById(fb.getId());
+        check("Chips added at the checkout are on the bill: food 190, subtotal 460, minus 30 = Rs. 430",
+                same("190", fbPaid.getItemsAmount()) && same("460", fbPaid.getChargesSubtotal()) && same("430", fbPaid.getFinalAmount())
+                        && fbPaid.getItems().size() == 2);
+        check("The food is stored with the game for reports", orderDAO.findBySession(f1).size() == 2);
+        check("Revenue goes up by the bill total with food (430)", revenueBeforeFood.add(new BigDecimal("430")).compareTo(billDAO.revenueBetween(today, today)) == 0);
+
+        // ---------- memberships with plans ----------
+        MembershipPlanDAO planDAO = new MembershipPlanDAO();
+        MembershipService membershipService = new MembershipService();
+        List<MembershipPlan> plans = planDAO.findAll();
+        check("The three plans exist: Monthly, Quarterly, Yearly", plans.size() == 3 && plans.get(0).getName().equals("Monthly")
+                && plans.get(1).getMonths() == 3 && plans.get(2).getMonths() == 12);
+        Customer meeraNow = customerDAO.findById(meeraId);
+        Checkout noPrice = new Checkout(plans.get(0).getPrice());
+        check("A plan whose price is not set cannot be sold", throwsType(() -> membershipService.sell(meeraNow, plans.get(0), noPrice, ken, staff), BusinessException.class));
+        planDAO.update(plans.get(0).getId(), 1, new BigDecimal("500"), new BigDecimal("5"));
+        MembershipPlan monthly = planDAO.findAll().get(0);
+        check("The owner can set the plan price", same("500", monthly.getPrice()));
+        StaffMember billedByNow = staffDAO.findActive().get(0);
+        Checkout half = new Checkout(monthly.getPrice());
+        half.addPayment("UPI", new BigDecimal("200"));
+        check("A membership cannot be sold before it is fully paid", throwsType(() -> membershipService.sell(meeraNow, monthly, half, billedByNow, staff), BusinessException.class));
+        Customer walkIn = customerDAO.findAll().stream().filter(Customer::isWalkIn).findFirst().get();
+        Checkout full = new Checkout(monthly.getPrice());
+        full.addPayment("CASH", new BigDecimal("500"));
+        check("A walk-in guest cannot become a member", throwsType(() -> membershipService.sell(walkIn, monthly, full, billedByNow, staff), BusinessException.class));
+        half.addPayment("CASH", half.getRemaining());
+        BigDecimal revenueBeforeMembership = billDAO.revenueBetween(today, today);
+        Membership sold = membershipService.sell(meeraNow, monthly, half, billedByNow, staff);
+        check("Selling Monthly: starts today, ends one month later minus a day",
+                sold.getStartDate().equals(today) && sold.getExpiryDate().equals(today.plusMonths(1).minusDays(1)) && sold.getPlanName().equals("Monthly"));
+        check("The member gets the plan discount on games (5%)", same("5", membershipDAO.discountFor(meeraId, today)));
+        check("Membership sales count as revenue (+500)", revenueBeforeMembership.add(new BigDecimal("500")).compareTo(billDAO.revenueBetween(today, today)) == 0);
+        check("Membership sales are totalled separately (500 today)", same("500", membershipDAO.salesBetween(today, today)));
+        check("The customer record shows the membership", sold.getStatusText().startsWith("Monthly member until"));
+        Checkout again = new Checkout(monthly.getPrice());
+        again.addPayment("UPI", new BigDecimal("500"));
+        Membership renewed = membershipService.sell(meeraNow, monthly, again, billedByNow, staff);
+        check("Buying again while still a member starts the day after the current end", renewed.getStartDate().equals(sold.getExpiryDate().plusDays(1)));
+        check("Staff cannot cancel a membership", throwsType(() -> membershipService.cancel(renewed, staff), BusinessException.class));
+        BigDecimal revenueBeforeCancelM = billDAO.revenueBetween(today, today);
+        membershipService.cancel(renewed, owner);
+        check("Cancelling keeps the money in the revenue (no refund)", revenueBeforeCancelM.compareTo(billDAO.revenueBetween(today, today)) == 0);
+
         System.out.println(passed + " passed, " + failed + " failed");
         if (failed > 0) System.exit(1);
     }
@@ -521,13 +598,16 @@ public class BackendTest {
     /** Empties the transaction tables of the TEST database so every test run starts clean. */
     static void cleanTestDatabase() throws SQLException {
         try (Connection con = DBConnection.getConnection(); Statement st = con.createStatement()) {
-            for (String table : new String[]{"payment_parts", "payments", "bills", "sessions", "bookings", "expenses", "memberships",
-                    "staff_shifts", "staff_members", "users"}) {
+            for (String table : new String[]{"payment_parts", "payments", "order_items", "bills", "sessions", "bookings", "expenses",
+                    "memberships", "menu_items", "staff_shifts", "staff_members", "users"}) {
                 st.executeUpdate("DELETE FROM " + table);
             }
             st.executeUpdate("DELETE FROM customers WHERE is_walk_in = FALSE");
             st.executeUpdate("DELETE FROM game_tables WHERE table_name NOT IN ('Pool Table 1','Pool Table 2','Pool Table 3','Snooker Table 1','PS5 Station 1')");
             st.executeUpdate("UPDATE game_tables SET is_active = TRUE, is_under_maintenance = FALSE");
+            // plans back to the starting values: price not set yet
+            st.executeUpdate("UPDATE membership_plans SET price = 0, duration_months = CASE name WHEN 'Monthly' THEN 1 WHEN 'Quarterly' THEN 3 ELSE 12 END, "
+                    + "discount_percent = CASE name WHEN 'Monthly' THEN 5 WHEN 'Quarterly' THEN 10 ELSE 15 END WHERE plan_id > 0");
         }
     }
 }

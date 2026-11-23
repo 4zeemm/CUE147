@@ -295,6 +295,24 @@ public class GuiClickTest {
                 .filter(t -> t != null && t.startsWith(start)).findFirst().orElse("none"));
     }
 
+    /** A component found by the name the program gave it with setName(...). */
+    static <T extends Component> T named(Container root, Class<T> type, String name) throws Exception {
+        T found = onEdt(() -> all(root, type, false).stream().filter(c -> name.equals(c.getName())).findFirst().orElse(null));
+        check(found != null, "no " + type.getSimpleName() + " named " + name);
+        return found;
+    }
+
+    static String labelContaining(Container root, String part) throws Exception {
+        return onEdt(() -> all(root, JLabel.class, false).stream().map(JLabel::getText)
+                .filter(t -> t != null && t.contains(part)).findFirst().orElse("none"));
+    }
+
+    /** Chooses the drop-down entry whose text contains the given words. */
+    static void chooseItem(JComboBox<?> box, String text) throws Exception {
+        edt(() -> { for (int i = 0; i < box.getItemCount(); i++) if (String.valueOf(box.getItemAt(i)).contains(text)) { box.setSelectedIndex(i); break; } });
+        sleep(150);
+    }
+
     static boolean hasLabel(Container root, String text) throws Exception {
         return onEdt(() -> all(root, JLabel.class, false).stream().anyMatch(l -> text.equals(l.getText())));
     }
@@ -756,14 +774,14 @@ public class GuiClickTest {
             answer("Yes");
             JDialog co = waitForTitle("Checkout");
             check(co != null, "checkout did not open");
-            JComboBox<?> type = onEdt(() -> all(co, JComboBox.class, false).stream().filter(b -> b.getItemCount() == 3 && "Percent %".equals(b.getItemAt(2))).findFirst().get());
-            JSpinner value = all(co, JSpinner.class, false).get(0);
+            JComboBox<?> type = named(co, JComboBox.class, "discountType");
+            JSpinner value = named(co, JSpinner.class, "discountValue");
             edt(() -> { type.setSelectedIndex(2); value.setValue(150.0); });
             sleep(300);
             String warning = labelStarting(co, "A percentage");
             check(warning.contains("more than 100%"), "no message for 150%: " + warning);
             edt(() -> value.setValue(10.0));
-            JComboBox<?> occasion = onEdt(() -> all(co, JComboBox.class, false).stream().filter(JComboBox::isEditable).findFirst().get());
+            JComboBox<?> occasion = named(co, JComboBox.class, "occasion");
             edt(() -> occasion.setSelectedItem("Christmas"));
             sleep(300);
             check(hasLabel(co, "₹243.00"), "final total is not 243");
@@ -786,8 +804,8 @@ public class GuiClickTest {
             JDialog co = waitForTitle("Checkout");
             check(co != null, "checkout did not open");
             check(hasLabel(co, "₹243.00"), "saved discount not restored");
-            JComboBox<?> method = onEdt(() -> all(co, JComboBox.class, false).stream().filter(b -> b.getItemCount() == 2 && "UPI".equals(b.getItemAt(1))).findFirst().get());
-            JSpinner amount = all(co, JSpinner.class, false).get(1);
+            JComboBox<?> method = named(co, JComboBox.class, "payMethod");
+            JSpinner amount = named(co, JSpinner.class, "payAmount");
             edt(() -> { method.setSelectedIndex(1); amount.setValue(100.0); });
             SwingUtilities.invokeLater(findButton(co, "Add Payment")::doClick);
             sleep(400);
@@ -870,16 +888,63 @@ public class GuiClickTest {
         });
         goTo("Membership");
         MembershipPanel mp = panel(MembershipPanel.class);
-        test("Membership", "Add a Monthly member", "Membership saved: ACTIVE, 5% discount", () -> {
-            click(mp, "Add Member");
+        test("Membership", "Sell Membership while the Monthly price is not set", "Pop-up: the price is not set yet; nothing sold", () -> {
+            click(mp, "Sell Membership");
+            JDialog d = waitForTitle("Sell Membership");
+            check(d != null, "Sell Membership window did not open");
+            chooseCustomer(d, "Kiran Rao");
+            SwingUtilities.invokeLater(findButton(d, "Pay Cash")::doClick);
             String text = answer("OK");
-            check(text.contains("member"), text);
-            Membership m = new MembershipDAO().findAll().get(0);
-            check(m.getDisplayStatus().equals("ACTIVE") && m.getDiscountPercent().compareTo(new BigDecimal("5")) == 0, m.getDisplayStatus());
-            return "Pop-up: \"" + text + "\"; MySQL: " + m.getCustomerName() + " " + m.getDisplayStatus() + ", " + m.getDiscountPercent() + "% until " + m.getExpiryDate();
+            check(text.contains("not set yet"), text);
+            SwingUtilities.invokeLater(findButton(d, "Close")::doClick);
+            for (int i = 0; i < 200 && d.isShowing(); i++) sleep(15);
+            check(new MembershipDAO().findAll().isEmpty(), "a membership was saved");
+            return "Pop-up: \"" + text.replace("\n", " ") + "\"";
+        });
+        test("Settings", "Membership Plans: set the Monthly price to Rs. 500", "Plan saved in MySQL (1 month, Rs. 500, 5% off games)", () -> {
+            goTo("Settings");
+            SettingsPanel spp = panel(SettingsPanel.class);
+            JTabbedPane tabs = all(spp, JTabbedPane.class, true).get(0);
+            edt(() -> tabs.setSelectedIndex(5));
+            sleep(300);
+            JTable plansTable = all(spp, JTable.class, true).get(0);
+            selectRow(plansTable, rowWith(plansTable, "Monthly"));
+            JSpinner planPrice = named(spp, JSpinner.class, "planPrice");
+            edt(() -> planPrice.setValue(500.0));
+            shot(frame, "11d-settings-membership-plans");
+            click(spp, "Save Plan");
+            String text = answer("OK");
+            MembershipPlan monthly = new MembershipPlanDAO().findAll().get(0);
+            check(monthly.getPrice().compareTo(new BigDecimal("500")) == 0 && monthly.getMonths() == 1, "plan " + monthly);
+            edt(() -> tabs.setSelectedIndex(0));
+            return "Pop-up: \"" + text.replace("\n", " ") + "\"";
+        });
+        goTo("Membership");
+        test("Membership", "Sell Monthly to Kiran: Rs. 200 UPI + the rest in cash", "Membership ACTIVE until one month later; paid 500 as SPLIT; counted as revenue", () -> {
+            BigDecimal revenueBefore = billDAO.revenueBetween(today, today);
+            click(mp, "Sell Membership");
+            JDialog d = waitForTitle("Sell Membership");
+            chooseCustomer(d, "Kiran Rao");
+            chooseItem(named(d, JComboBox.class, "plan"), "Monthly");
+            String dates = onEdt(() -> all(d, JLabel.class, false).stream().map(JLabel::getText).filter(t -> t != null && t.contains("  to  ")).findFirst().orElse("none"));
+            JComboBox<?> method = named(d, JComboBox.class, "payMethod");
+            JSpinner amount = named(d, JSpinner.class, "payAmount");
+            edt(() -> { method.setSelectedIndex(1); amount.setValue(200.0); });
+            SwingUtilities.invokeLater(findButton(d, "Add Payment")::doClick);
+            sleep(400);
+            check(hasLabel(d, "₹300.00"), "remaining is not 300");
+            shot(d, "10b-sell-membership");
+            SwingUtilities.invokeLater(findButton(d, "Pay Cash")::doClick);
+            String text = answer("OK");
+            check(text.contains("Monthly member until"), text);
+            Membership m = new MembershipDAO().findLatestForCustomer(customerDAO.search("9876500077").get(0).getId());
+            check(m.getDisplayStatus().equals("ACTIVE") && m.getPlanName().equals("Monthly") && m.getPricePaid().compareTo(new BigDecimal("500")) == 0
+                    && m.getExpiryDate().equals(today.plusMonths(1).minusDays(1)), m.getStatusText());
+            check(revenueBefore.add(new BigDecimal("500")).compareTo(billDAO.revenueBetween(today, today)) == 0, "revenue did not go up by 500");
+            return "Dates shown: " + dates + "; pop-up: \"" + text.replace("\n", " ") + "\"; revenue +500";
         });
         shot(frame, "10-membership");
-        test("Customers", "Start Game shows the chosen customer's membership", "The search box shows 'Member until <date>' by itself", () -> {
+        test("Customers", "Start Game shows the chosen customer's membership", "The search box shows 'Monthly member until <date>' by itself", () -> {
             String member = new MembershipDAO().findAll().get(0).getCustomerName();
             goTo("Tables");
             TablesPanel tpm = panel(TablesPanel.class);
@@ -887,8 +952,8 @@ public class GuiClickTest {
             clickPopup("Start Game");
             JDialog d = waitForDialogWith(CustomerPicker.class);
             chooseCustomer(d, member);
-            String label = labelStarting(d, "Member");
-            check(label.startsWith("Member until") || label.startsWith("Member,"), label);
+            String label = labelContaining(d, "member until");
+            check(label.startsWith("Monthly member until"), label);
             shot(d, "05c-customer-membership");
             SwingUtilities.invokeLater(findButton(d, "Cancel")::doClick);
             for (int i = 0; i < 200 && d.isShowing(); i++) sleep(15);
@@ -973,6 +1038,24 @@ public class GuiClickTest {
             check(new StaffMemberDAO().findAll().stream().anyMatch(m -> m.getName().equals("Ken") && !m.isActive()), "Ken still active");
             return "Ken added; duplicate pop-up: \"" + text + "\"; Ken switched off";
         });
+        test("Settings", "Food & Drinks Menu: add Cold Coffee (Rs. 80) and Chips (Rs. 30)", "Both items saved and available; a duplicate is refused", () -> {
+            edt(() -> settingsTabs.setSelectedIndex(6));
+            sleep(300);
+            JTextField name = all(sp, JTextField.class, true).get(0);
+            JComboBox<?> category = all(sp, JComboBox.class, true).stream().filter(JComboBox::isEditable).findFirst().get();
+            JSpinner price = named(sp, JSpinner.class, "itemPrice");
+            for (Object[] item : new Object[][]{{"Cold Coffee", "Beverages", 80.0}, {"Chips", "Snacks", 30.0}}) {
+                edt(() -> { name.setText((String) item[0]); category.setSelectedItem(item[1]); price.setValue(item[2]); });
+                click(sp, "Add Item");
+            }
+            edt(() -> { name.setText("Chips"); price.setValue(30.0); });
+            click(sp, "Add Item");
+            String text = answer("OK");
+            check(text.contains("already on the menu"), text);
+            check(new MenuItemDAO().findAvailable().size() == 2, "menu has " + new MenuItemDAO().findAvailable().size() + " items");
+            shot(frame, "11e-settings-menu");
+            return "MySQL menu: Cold Coffee Rs. 80, Chips Rs. 30; duplicate pop-up: \"" + text + "\"";
+        });
         test("Billing", "View / Print Bill: print the bill to a file", "The bill shows the new club name; a PostScript print file is made", () -> {
             edt(() -> settingsTabs.setSelectedIndex(0));
             goTo("Billing");
@@ -991,6 +1074,56 @@ public class GuiClickTest {
             check(head.equals("%!PS") && size > 1000, "print file wrong: " + head + " " + size);
             answer("Close");
             return "Bill shows \"CUE 147 TEST CLUB\"; printed to " + ps.getPath() + " (" + size + " bytes, starts with %!PS)";
+        });
+        test("Food & Drinks", "During a game: Food & Drinks > 2 x Cold Coffee", "Saved on the running game of Pool Table 3", () -> {
+            goTo("Tables");
+            TablesPanel tf = panel(TablesPanel.class);
+            rightClick(cardFor(tf, "Pool Table 3"));
+            clickPopup("Start Game");
+            JDialog d = waitForDialogWith(CustomerPicker.class);
+            chooseCustomer(d, "Priya Nair");
+            SwingUtilities.invokeLater(findButton(d, "OK")::doClick);
+            for (int i = 0; i < 200 && d.isShowing(); i++) sleep(15);
+            answer("OK");
+            click(tf, "Food & Drinks");
+            JDialog fd = waitForTitle("Food & Drinks");
+            check(fd != null, "Food & Drinks window did not open");
+            JComboBox<?> menu = onEdt(() -> all(fd, JComboBox.class, false).get(0));
+            chooseItem(menu, "Cold Coffee");
+            JSpinner qty = named(fd, JSpinner.class, "itemQty");
+            edt(() -> qty.setValue(2));
+            SwingUtilities.invokeLater(findButton(fd, "Add Item")::doClick);
+            sleep(500);
+            check(hasLabel(fd, "Food & drinks: ₹160.00"), "total is not 160");
+            shot(fd, "03c-food-and-drinks");
+            SwingUtilities.invokeLater(findButton(fd, "Close")::doClick);
+            for (int i = 0; i < 200 && fd.isShowing(); i++) sleep(15);
+            int sessionId = sessionDAO.findActive().stream().filter(x -> x.getTableName().equals("Pool Table 3")).findFirst().get().getId();
+            List<OrderItem> items = new OrderItemDAO().findBySession(sessionId);
+            check(items.size() == 1 && items.get(0).getQuantity() == 2 && items.get(0).getName().equals("Cold Coffee"), "order not saved");
+            return "MySQL order of the game: Cold Coffee x2 (Rs. 160)";
+        });
+        test("Food & Drinks", "End Game: coffee is on the bill, add Chips at the checkout, Pay UPI", "Bill = 220 table + 160 + 30 = Rs. 410, PAID by UPI", () -> {
+            TablesPanel tf = panel(TablesPanel.class);
+            rightClick(cardFor(tf, "Pool Table 3"));
+            clickPopup("End Game");
+            answer("Yes");
+            JDialog co = waitForTitle("Checkout");
+            check(co != null, "checkout did not open");
+            check(hasLabel(co, "₹380.00"), "final total is not 380 (220 + 160)");
+            JComboBox<?> menu = onEdt(() -> all(co, JComboBox.class, false).stream().filter(b -> b.getItemCount() > 0 && b.getItemAt(0) instanceof model.MenuItem).findFirst().get());
+            chooseItem(menu, "Chips");
+            SwingUtilities.invokeLater(findButton(co, "Add Item")::doClick);
+            sleep(400);
+            check(hasLabel(co, "₹410.00"), "final total is not 410");
+            shot(co, "06d-checkout-food");
+            SwingUtilities.invokeLater(findButton(co, "Pay UPI")::doClick);
+            String text = answer("OK");
+            answer("Close");
+            Bill b = billDAO.findById(billDAO.search("Priya", false).get(0).getId());
+            check(b.isPaid() && b.getFinalAmount().compareTo(new BigDecimal("410")) == 0 && b.getItemsAmount().compareTo(new BigDecimal("190")) == 0
+                    && b.getItems().size() == 2, b.getPaymentLabel() + " " + b.getFinalAmount());
+            return "Pop-up: \"" + text + "\"; MySQL: food " + b.getItemsAmount() + " (" + b.getItems().size() + " lines), total " + b.getFinalAmount() + ", " + b.getPaymentMethod();
         });
         goTo("Reports");
         test("Reports", "Daily Report button", "Pop-up with today's revenue, games and busiest table", () -> {

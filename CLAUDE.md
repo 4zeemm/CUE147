@@ -121,7 +121,9 @@ Phase 5: UI polish (FlatLaf, dashboard), installers and GitHub Actions.
   They never touch the real `cue147` database. GUI tests must never press Save in Database settings
   (that would overwrite the developer's real settings file).
 - Phase status: Phase 1 done (Maven, shared-database settings, migrations). Phase 2 done (customer
-  search-or-add picker with membership, one-screen checkout, discounts, split payments, Billed by). Next: Phase 3.
+  search-or-add picker with membership, one-screen checkout, discounts, split payments, Billed by). Phase 3 done
+  (membership plans + Sell Membership with split payment; food & drinks menu, orders during a game, F&B on the bill).
+  Next: Phase 4.
 - Checkout money rules live in `service.Checkout` (pure, JUnit-tested in `test/service/CheckoutTest.java`).
   UI: `ui.CheckoutDialog` (opened after End Game and from Billing > Checkout / Pay). Saving: `BillService.completeCheckout`
   -> `BillDAO.completeCheckout` (one transaction). Bill subtotal = `bills.table_amount` (+ F&B in Phase 3).
@@ -130,5 +132,12 @@ Phase 5: UI polish (FlatLaf, dashboard), installers and GitHub Actions.
 - "Billed by" names: table `staff_members` (Settings > Staff List), separate from login `users`. Never delete a name,
   switch it off. The last name used is remembered per computer (`AppSettings.getLastBilledById`).
 - Customer choosing: `ui.CustomerPicker` (one search box, Add with name + phone only, shows membership).
+- Payments belong to a bill (`payments.bill_id`) OR a membership sale (`payments.membership_id`); both count as revenue.
+  `ui.PaymentPanel` is the shared split-payment widget (checkout and Sell Membership).
+- Memberships: plans in `membership_plans` (price 0 = cannot be sold yet). `MembershipService.sell` works out the dates
+  (starts after the current membership if still active). `MembershipDAO.findLatestForCustomer` prefers ACTIVE ones.
+- Food & drinks: `menu_items` (never deleted, switched off) and `order_items` (per game/session; name and price COPIED).
+  Bill subtotal = `table_amount + items_amount`. The checkout replaces a game's order lines when the bill is saved,
+  so it must always work on a freshly loaded bill (`BillDAO.findById` loads the items) - `CheckoutDialog.open` does this.
 - Local development MySQL lives in `~/cue147-mysql` (socket `~/cue147-mysql/mysql.sock`, root has no password locally).
 - The code started as a first-year student project: keep it readable and explainable, no clever tricks.

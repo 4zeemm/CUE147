@@ -27,6 +27,7 @@ public class SchemaMigrator {
     static final String[] MIGRATIONS = {
             "V001__base_schema.sql",
             "V002__checkout_discounts_split_payments.sql",
+            "V003__memberships_and_food.sql",
     };
 
     private static final String LOCK = "cue147_schema_update";

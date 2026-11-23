@@ -23,7 +23,12 @@ Developer scripts (macOS, local MySQL in `~/cue147-mysql`): `./setup-db.sh` (onc
   then press **Pay Cash** or **Pay UPI**. For a split bill, type the first amount, **Add Payment**, then pay the rest.
   The remaining amount is always shown; the bill closes only when it is fully paid. **Pay Later** keeps it unpaid
   (Billing > Checkout / Pay finishes it later).
-- The owner manages the **Billed by** names in Settings > Staff List.
+- **Food & drinks:** while a game runs, press **Food & Drinks** on the table card and add items. They appear on the same
+  bill. More items can also be added (or removed) at the checkout.
+- **Memberships:** Membership > **Sell Membership** > search the customer > choose the plan > take the payment (split allowed).
+  The dates are set automatically; buying again before the end extends the membership.
+- The owner manages the **Billed by** names (Settings > Staff List), the **membership plan prices** (Settings > Membership Plans;
+  a plan cannot be sold until its price is set) and the **menu** (Settings > Food & Drinks Menu).
 
 ## Database
 - **Settings** are not in the code. Each computer saves them in `.cue147/database.properties` in the user's home folder

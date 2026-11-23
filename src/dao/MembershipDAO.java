@@ -2,6 +2,7 @@ package dao;
 
 import database.DBConnection;
 import model.Membership;
+import model.PaymentPart;
 
 import java.math.BigDecimal;
 import java.sql.*;
@@ -13,12 +14,80 @@ import java.util.List;
 public class MembershipDAO {
 
     private static final String SELECT_MEMBER =
-            "SELECT m.*, c.name, c.phone FROM memberships m JOIN customers c ON c.customer_id = m.customer_id ";
+            "SELECT m.*, c.name, c.phone, mp.name AS plan_name FROM memberships m JOIN customers c ON c.customer_id = m.customer_id "
+            + "LEFT JOIN membership_plans mp ON mp.plan_id = m.plan_id ";
 
     private Membership readMembership(ResultSet rs) throws SQLException {
-        return new Membership(rs.getInt("membership_id"), rs.getInt("customer_id"), rs.getString("name"),
+        Membership m = new Membership(rs.getInt("membership_id"), rs.getInt("customer_id"), rs.getString("name"),
                 rs.getString("phone"), rs.getDate("start_date").toLocalDate(), rs.getDate("expiry_date").toLocalDate(),
                 rs.getBigDecimal("discount_percent"), rs.getString("status"));
+        m.setSaleDetails(rs.getString("plan_name"), rs.getBigDecimal("price_paid"));
+        return m;
+    }
+
+    /**
+     * Sells a membership, all in ONE transaction: the membership row, its PAID payment (this is revenue),
+     * every payment part (Cash / UPI), and the customer's total spending. Returns the new membership id.
+     */
+    public int sell(int customerId, int planId, LocalDate start, LocalDate end, BigDecimal discountPercent, BigDecimal price,
+                    String methodLabel, List<PaymentPart> parts, int billedByStaffId, int receivedBy) throws SQLException {
+        try (Connection con = DBConnection.getConnection()) {
+            con.setAutoCommit(false);
+            try {
+                Timestamp now = new Timestamp(System.currentTimeMillis());
+                int membershipId;
+                try (PreparedStatement ps = con.prepareStatement("INSERT INTO memberships (customer_id, start_date, expiry_date, "
+                        + "discount_percent, plan_id, price_paid, sold_at, billed_by_staff_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        Statement.RETURN_GENERATED_KEYS)) {
+                    ps.setInt(1, customerId);
+                    ps.setDate(2, Date.valueOf(start));
+                    ps.setDate(3, Date.valueOf(end));
+                    ps.setBigDecimal(4, discountPercent);
+                    ps.setInt(5, planId);
+                    ps.setBigDecimal(6, price);
+                    ps.setTimestamp(7, now);
+                    ps.setInt(8, billedByStaffId);
+                    ps.executeUpdate();
+                    try (ResultSet keys = ps.getGeneratedKeys()) { keys.next(); membershipId = keys.getInt(1); }
+                }
+                int paymentId;
+                try (PreparedStatement ps = con.prepareStatement("INSERT INTO payments (membership_id, amount, method, status, paid_at, received_by) "
+                        + "VALUES (?, ?, ?, 'PAID', ?, ?)", Statement.RETURN_GENERATED_KEYS)) {
+                    ps.setInt(1, membershipId);
+                    ps.setBigDecimal(2, price);
+                    ps.setString(3, methodLabel);
+                    ps.setTimestamp(4, now);
+                    ps.setInt(5, receivedBy);
+                    ps.executeUpdate();
+                    try (ResultSet keys = ps.getGeneratedKeys()) { keys.next(); paymentId = keys.getInt(1); }
+                }
+                BillDAO.insertParts(con, paymentId, parts, now);
+                try (PreparedStatement ps = con.prepareStatement("UPDATE customers SET total_spent = total_spent + ? WHERE customer_id = ?")) {
+                    ps.setBigDecimal(1, price);
+                    ps.setInt(2, customerId);
+                    ps.executeUpdate();
+                }
+                con.commit();
+                return membershipId;
+            } catch (SQLException e) {
+                con.rollback();
+                throw e;
+            }
+        }
+    }
+
+    /** Total of the membership sales paid between two dates (part of the revenue). */
+    public BigDecimal salesBetween(LocalDate from, LocalDate to) throws SQLException {
+        String sql = "SELECT COALESCE(SUM(amount), 0) FROM payments WHERE membership_id IS NOT NULL AND status = 'PAID' AND DATE(paid_at) BETWEEN ? AND ?";
+        try (Connection con = DBConnection.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setDate(1, Date.valueOf(from));
+            ps.setDate(2, Date.valueOf(to));
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getBigDecimal(1);
+            }
+        }
     }
 
     public List<Membership> findAll() throws SQLException {
@@ -31,10 +100,14 @@ public class MembershipDAO {
         return list;
     }
 
-    /** The latest membership of a customer, or null. */
+    /**
+     * The membership to show for a customer, or null: the ACTIVE one that ends last;
+     * only when there is none, the latest cancelled one.
+     */
     public Membership findLatestForCustomer(int customerId) throws SQLException {
         try (Connection con = DBConnection.getConnection();
-             PreparedStatement ps = con.prepareStatement(SELECT_MEMBER + "WHERE m.customer_id = ? ORDER BY m.expiry_date DESC LIMIT 1")) {
+             PreparedStatement ps = con.prepareStatement(SELECT_MEMBER + "WHERE m.customer_id = ? "
+                     + "ORDER BY (m.status = 'ACTIVE') DESC, m.expiry_date DESC LIMIT 1")) {
             ps.setInt(1, customerId);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? readMembership(rs) : null;

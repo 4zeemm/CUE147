@@ -97,6 +97,7 @@ public class TablesPanel extends ScreenPanel {
     private void buildPopup() {
         popup.add(menuItem("Start Game", () -> { GameTable t = need(); if (t != null) startGame(t); }));
         popup.add(menuItem("End Game", () -> { GameTable t = need(); if (t != null) endGame(t); }));
+        popup.add(menuItem("Food & Drinks", () -> { GameTable t = need(); if (t != null) foodAndDrinks(t); }));
         popup.addSeparator();
         popup.add(menuItem("Cancel Game (started by mistake)", () -> { GameTable t = need(); if (t != null) cancelGame(t); }));
         popup.add(menuItem("Adjust Start Time", () -> { GameTable t = need(); if (t != null) adjustStart(t); }));
@@ -196,7 +197,9 @@ public class TablesPanel extends ScreenPanel {
             start.setEnabled(false);
             start.setToolTipText("This table is under maintenance");
         }
-        RoundButton details = Theme.button("Details", Theme.BLUE, e -> showDetails(t));
+        // while a game runs, the second button adds food & drinks; otherwise it shows the details
+        RoundButton details = t.isOccupied() ? Theme.button("Food & Drinks", Theme.BLUE, e -> foodAndDrinks(t))
+                : Theme.button("Details", Theme.BLUE, e -> showDetails(t));
         for (RoundButton b : new RoundButton[]{start, details}) {
             b.setFont(Theme.SMALL.deriveFont(Font.BOLD));
             b.setBorder(new EmptyBorder(7, 4, 7, 4));
@@ -289,6 +292,16 @@ public class TablesPanel extends ScreenPanel {
         } catch (SQLException e) {
             showDbError(e);
         }
+    }
+
+    /** Food & drinks for the running game on this table (they go on the same bill). */
+    private void foodAndDrinks(GameTable t) {
+        if (!t.isOccupied()) {
+            Theme.info(this, t.getName() + " has no running game. Start a game first.", "Food & Drinks");
+            return;
+        }
+        FoodDrinksDialog.open(frame, t.getName(), t.getActivePlayer(), t.getActiveSessionId());
+        frame.setStatus("Food & drinks updated for " + t.getName());
     }
 
     private void endGame(GameTable t) {
