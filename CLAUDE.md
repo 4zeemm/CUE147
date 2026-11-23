@@ -109,7 +109,17 @@ Phase 5: UI polish (FlatLaf, dashboard), installers and GitHub Actions.
 - Layers: `ui` (Swing screens) -> `service` (business rules) -> `dao` (all SQL, PreparedStatement only) -> `database.DBConnection` -> MySQL 8.4.
 - Money is always `BigDecimal`. Billing rules live in `service.BillingCalculator`.
 - Never delete money records: bills and payments get a status (CANCELLED / REFUNDED) and a reason.
-- Tests: `./test.sh` runs the main-method test programs against the separate database `cue147_test`
-  (start Java with `-Dcue147.db=cue147_test`). They never touch the real `cue147` database.
+- Build: Maven via the wrapper (`./mvnw package`, Windows `mvnw.cmd package`). Source stays in `src/`, tests in `test/`,
+  resources in `resources/` (configured in pom.xml). Target Java 17 (`maven.compiler.release`).
+- Database settings: `database.DatabaseConfig` (file `~/.cue147/database.properties`, edited by the
+  "Database settings" window on the login screen). Nothing about the connection is hard-coded except the defaults.
+- Schema changes: add a NEW file `resources/db/V00N__name.sql` and append it to `SchemaMigrator.MIGRATIONS`.
+  Never edit an applied file. The app migrates on start (MySQL lock, table `schema_version`).
+  Existing databases from the college version are recorded as version 1 automatically.
+- Tests: `./test.sh` runs `./mvnw package` (JUnit tests in `test/service`, `test/database`) and then the
+  main-method test programs against the separate database `cue147_test` (`-Dcue147.db=cue147_test`).
+  They never touch the real `cue147` database. GUI tests must never press Save in Database settings
+  (that would overwrite the developer's real settings file).
+- Phase status: Phase 1 done (Maven, shared-database settings, migrations). Next: Phase 2.
 - Local development MySQL lives in `~/cue147-mysql` (socket `~/cue147-mysql/mysql.sock`, root has no password locally).
 - The code started as a first-year student project: keep it readable and explainable, no clever tricks.

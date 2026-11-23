@@ -1,10 +1,13 @@
 #!/bin/bash
-# Compiles the project and runs the automatic tests (needs MySQL running: ./start-mysql.sh)
+# Builds the project with Maven and runs all automatic tests (MySQL is started if needed)
 cd "$(dirname "$0")"
 ./ensure-mysql.sh || exit 1
-CP="out:lib/mysql-connector-j-8.4.0.jar"
-mkdir -p out
-javac -cp "$CP" -d out $(find src -name "*.java") test/*.java || exit 1
+echo "=== JUnit tests and build (Maven) ==="
+./mvnw -q -B package 2>&1 | grep -v "^WARNING"
+[ "${PIPESTATUS[0]}" = "0" ] || { echo "FAIL  Maven build or JUnit tests"; exit 1; }
+echo "PASS  Maven build and JUnit tests (details: target/surefire-reports)"
+CP="target/classes:target/test-classes:target/lib/*"
+java -Dcue147.db=cue147_test -cp "$CP" database.SchemaMigrator || exit 1
 java -cp "$CP" BillingTest || exit 1
 java -Dcue147.db=cue147_test -cp "$CP" BackendTest || exit 1
 echo "=== Restart test (two separate programs) ==="

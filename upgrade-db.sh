@@ -1,13 +1,8 @@
 #!/bin/bash
-# Adds the "correction" columns to an EXISTING database (keeps all data). Safe to run many times.
-MYSQL=~/cue147-mysql/mysql-8.4.3-macos14-arm64/bin/mysql
-SOCK=$HOME/cue147-mysql/mysql.sock
+# Brings the tables of cue147 and cue147_test up to date (keeps all data). Safe to run many times.
+# (The app does the same by itself when it starts.)
 cd "$(dirname "$0")"
-for DB in cue147 cue147_test; do
-  DONE=$($MYSQL --no-defaults -uroot --socket=$SOCK -N -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='$DB' AND table_name='game_tables' AND column_name='is_under_maintenance'")
-  if [ "$DONE" = "0" ]; then
-    (echo "USE $DB;"; cat sql/upgrade_v2.sql) | $MYSQL --no-defaults -uroot --socket=$SOCK && echo "$DB upgraded"
-  else
-    echo "$DB already up to date"
-  fi
-done
+./mvnw -q -B -DskipTests package 2>&1 | grep -v "^WARNING" || true
+CP="target/classes:target/lib/*"
+java -cp "$CP" database.SchemaMigrator || exit 1
+java -Dcue147.db=cue147_test -cp "$CP" database.SchemaMigrator || exit 1

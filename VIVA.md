@@ -4,7 +4,7 @@
 | Marks | What the professor checks | Where in CUE 147 |
 |---|---|---|
 | R1 GUI (5) | Swing screens | Login + 10 screens, menu bar, toolbar, popup menu, tabs, timers (section 8) |
-| R1 Database (5) | Tables, keys | `sql/schema.sql`, `docs/diagrams/er-diagram.png` (section 6) |
+| R1 Database (5) | Tables, keys | `resources/db/V001__base_schema.sql`, `docs/diagrams/er-diagram.png` (section 6) |
 | R1 JDBC (5) | Java <-> MySQL | `database/DBConnection`, `dao/*` (section 4) |
 | R2 Packages + interfaces (5) | Organisation | 8 packages, 3 interfaces (sections 2, 3) |
 | R2 Libraries + exceptions (5) | Java API, try-catch | Section 5 |

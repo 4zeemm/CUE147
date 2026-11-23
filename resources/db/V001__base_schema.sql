@@ -1,17 +1,8 @@
 -- =====================================================================
---  CUE 147 - Snooker & Pool Club Management System
---  Run once:  ./setup-db.sh      (or run this file in any MySQL client)
+--  CUE 147 database version 1: all tables and the starting data.
+--  Applied by the app itself (database.SchemaMigrator) on an empty database.
+--  Later changes go in new files (V002__..., V003__...); never edit this file.
 -- =====================================================================
-
-CREATE DATABASE IF NOT EXISTS cue147 CHARACTER SET utf8mb4;
-USE cue147;
-
--- A normal (non-root) MySQL user that the Java program logs in with.
-CREATE USER IF NOT EXISTS 'cue147_app'@'localhost' IDENTIFIED BY 'cue147_pass';
-GRANT ALL PRIVILEGES ON cue147.* TO 'cue147_app'@'localhost';
--- (the test database used by the automatic tests)
-CREATE DATABASE IF NOT EXISTS cue147_test CHARACTER SET utf8mb4;
-GRANT ALL PRIVILEGES ON cue147_test.* TO 'cue147_app'@'localhost';
 
 -- 1. USERS: people who log in (owner or staff). Passwords are stored as hashes.
 CREATE TABLE IF NOT EXISTS users (

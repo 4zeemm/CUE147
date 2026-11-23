@@ -24,7 +24,7 @@ import java.util.concurrent.Callable;
  * GUI click test: opens the REAL application, types into the real text boxes, clicks the real buttons,
  * answers the pop-up windows and then checks the result in MySQL (database cue147_test).
  * Every case is written to docs/test-results/gui-click-test-results.tsv with what really happened.
- * Run:  java -Dcue147.db=cue147_test -cp "out:lib/mysql-connector-j-8.4.0.jar" GuiClickTest
+ * Run:  java -Dcue147.db=cue147_test -cp "target/classes:target/test-classes:target/lib/*" GuiClickTest
  */
 public class GuiClickTest {
     static final List<String[]> results = new ArrayList<>();
@@ -325,6 +325,32 @@ public class GuiClickTest {
             String text = answer("OK");
             check(text.contains("Owner"), text);
             return "Pop-up: \"" + text.substring(0, Math.min(70, text.length())) + "...\"";
+        });
+        test("Login", "Database settings: Test Connection with the saved settings", "Pop-up: Connected to the database", () -> {
+            click(login, "Database settings");
+            JDialog d = waitForDialogWith(JPasswordField.class);
+            check(d != null && d.getTitle().equals("Database settings"), "settings window did not open");
+            String host = onEdt(() -> all(d, JTextField.class, false).get(0).getText());
+            check(host.equals(database.DBConnection.getConfig().getHost()), "host box shows " + host);
+            shot(d, "01b-database-settings");
+            SwingUtilities.invokeLater(findButton(d, "Test Connection")::doClick);
+            String text = answer("OK");
+            check(text.startsWith("Connected to"), text);
+            return "Host box shows " + host + "; pop-up: \"" + text + "\"";
+        });
+        test("Login", "Database settings: wrong password, then Cancel", "Clear message about the password; nothing is saved", () -> {
+            JDialog d = waitForDialogWith(JPasswordField.class);
+            check(d != null, "settings window is not open");
+            JPasswordField pw = all(d, JPasswordField.class, false).get(0);
+            edt(() -> pw.setText("wrong-password"));
+            SwingUtilities.invokeLater(findButton(d, "Test Connection")::doClick);
+            String text = answer("OK");
+            check(text.contains("user name or password is wrong"), text);
+            SwingUtilities.invokeLater(findButton(d, "Cancel")::doClick);
+            for (int i = 0; i < 100 && d.isShowing(); i++) sleep(20);
+            check(!d.isShowing(), "window did not close");
+            check(database.DBConnection.isDatabaseReachable(), "settings were changed");
+            return "Pop-up: \"" + text + "\"; Cancel closed the window and the app still uses the old settings";
         });
         test("Login", "Login as Owner with the correct password", "Main window opens as Club Owner", () -> {
             setText(field(f.user), "owner"); setText(field(f.pass), "owner123"); click(login, "Owner");

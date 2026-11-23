@@ -1,3 +1,7 @@
+=== JUnit tests and build (Maven) ===
+
+PASS  Maven build and JUnit tests (details: target/surefire-reports)
+cue147_test is at database version 1
 === Billing calculator tests ===
 PASS  0 min (minimum one hour), rate 300  -> 300.00
 PASS  20 min, rate 300  -> 300.00
@@ -220,84 +224,86 @@ PASS  G03 Login - Wrong role chosen (Staff radio for the owner account)  ->  Pop
 PASS  G04 Login - Show password check box  ->  Password shown, then hidden again
 PASS  G05 Login - Clear button  ->  Both boxes empty
 PASS  G06 Login - Forgot password button  ->  Pop-up: "Passwords are stored as secure hashes, so they cannot be shown. Ask th..."
-PASS  G07 Login - Login as Owner with the correct password  ->  Main window opened: "CUE 147 - Snooker & Pool Club"
-PASS  G08 Navigation - Sidebar button: Dashboard  ->  Status bar shows "Viewing: Dashboard"
-PASS  G09 Navigation - Sidebar button: Tables  ->  Status bar shows "Viewing: Tables"
-PASS  G10 Navigation - Sidebar button: Customers  ->  Status bar shows "Viewing: Customers"
-PASS  G11 Navigation - Sidebar button: Bookings  ->  Status bar shows "Viewing: Bookings"
-PASS  G12 Navigation - Sidebar button: Billing  ->  Status bar shows "Viewing: Billing"
-PASS  G13 Navigation - Sidebar button: Membership  ->  Status bar shows "Viewing: Membership"
-PASS  G14 Navigation - Sidebar button: Expenses  ->  Status bar shows "Viewing: Expenses"
-PASS  G15 Navigation - Sidebar button: Reports  ->  Status bar shows "Viewing: Reports"
-PASS  G16 Navigation - Sidebar button: Staff  ->  Status bar shows "Viewing: Staff"
-PASS  G17 Navigation - Sidebar button: Settings  ->  Status bar shows "Viewing: Settings"
-PASS  G18 Customers - Add customer with a bad phone number  ->  Pop-up: "Phone number must be exactly 10 digits."; customer count unchanged (2)
-PASS  G19 Customers - Add customer with an empty name  ->  Pop-up: "Name is required."
-PASS  G20 Customers - Add a valid customer (Rahul Sharma, Men)  ->  Pop-up: "Customer Rahul Sharma registered."; found in MySQL and in the table
-PASS  G21 Customers - Add a second customer (Priya Nair, Ladies)  ->  Saved: Priya Nair, gender Ladies
-PASS  G22 Customers - Add customer with a phone number that already exists  ->  Pop-up: "This phone number is already registered."; still only one row in MySQL
-PASS  G23 Customers - Search for 'Rahul'  ->  Table shows 1 row: Rahul Sharma
-PASS  G24 Customers - Show All button  ->  Table shows 4 rows (2 walk-in guests + 2 customers)
-PASS  G25 Customers - History button without selecting a customer  ->  Pop-up: "Select a customer in the table first."
-PASS  G26 Customers - History of a customer  ->  History window opened for Rahul Sharma and was closed
-PASS  G27 Customers - Delete a new customer who never played (owner)  ->  Question: "Delete customer Temp Person? This cannot be undone."; after Yes the customer is gone from MySQL and the table
-PASS  G28 Customers - Delete the walk-in guest row  ->  Pop-up: "The built-in walk-in guest cannot be deleted."
-PASS  G29 Sessions - Start Game on Pool Table 1 for Rahul Sharma  ->  Pop-up: "Game started on Pool Table 1 Player: Rahul Sharma Rate: ₹270 / hour"; MySQL: Pool Table 1 = OCCUPIED, player Rahul Sharma, 1 active session
-PASS  G30 Sessions - Running timer on the table card  ->  Card shows a live timer (Running: 00:00:xx)
-PASS  G31 Sessions - Dashboard shows the active session  ->  Dashboard query: active 1, occupied 1, available 4 of 5
-PASS  G32 Payments - End Game, then pay by Cash  ->  Pop-up: "Payment of ₹270.00 received by CASH."; MySQL: bill CUE20261118-0001 = Rs. 270.00, PAID (CASH), received by Club Owner
-PASS  G33 Sessions - Table is free again after the game  ->  MySQL: Pool Table 1 = AVAILABLE
-PASS  G34 Payments - Second game: Priya (Ladies) pays by UPI  ->  MySQL: bill CUE20261118-0002 = Rs. 220.00, PAID (UPI)
-PASS  G35 Tables - Add Table (Pool Table 9)  ->  MySQL now has Pool Table 9 (6 tables)
-PASS  G36 Tables - Remove Table (Pool Table 9, no history)  ->  Table removed; MySQL has 5 tables again
-PASS  G37 Tables - Maintenance on, then off (Pool Table 3)  ->  Status MAINTENANCE (Start Game disabled), then AVAILABLE again
-PASS  G38 Billing - Bill list shows both bills  ->  Billing table shows 2 bills
-PASS  G39 Billing - Cancel Bill (refund Priya's paid bill)  ->  MySQL: bill CANCELLED, payment REFUNDED, reason kept; revenue 490.00 -> 270.00
-PASS  G40 Billing - Search bills by customer name  ->  Search shows 1 bill; Refresh shows all again
-PASS  G41 Billing - Cancel Bill without selecting a bill  ->  Pop-up: "Select a bill in the table first."
-PASS  G42 Expenses - Add expense with amount 0  ->  Pop-up: "Amount must be more than zero."
-PASS  G43 Expenses - Add expense (Rent, Rs. 1500, Cash)  ->  Pop-up: "Expense saved: RENT ₹1,500.00"; MySQL has 1 expense
-PASS  G44 Expenses - Edit the expense (amount 2000)  ->  MySQL amount = 2000.00
-PASS  G45 Dashboard - Dashboard figures after the sales and the expense  ->  Revenue 270.00, expenses 2000.00, estimated profit -1730.00
-PASS  G46 Expenses - Delete: press Cancel in the question  ->  Question: "Are you sure you want to delete this exp..."; after Cancel MySQL still has 1 expense
-PASS  G47 Expenses - Delete: press Yes in the question  ->  MySQL has 0 expenses; dashboard today's expenses = 0.00
-PASS  G48 Bookings - Book a table (defaults: today 19:00, 1 hour)  ->  Pop-up: "Booking confirmed! C..."; MySQL has 1 booking
-PASS  G49 Bookings - Cancel the booking  ->  MySQL booking status = CANCELLED
-PASS  G50 Bookings - Book 19:00, then try 19:30 on the same table  ->  Pop-up: "Pool Table 1 already has a booking that overlaps 19:30 (1.0 h) on 2026-11-18."; MySQL still has only 1 confirmed booking (then cancelled)
-PASS  G51 Bookings - Priya books Pool Table 1 from now; Rahul tries to play there  ->  Pop-up: "Pool Table 1 is booked for Priya Nair from 01:02 to 02:02. Start the game for Priya Nair, or cancel the booking first."; no game started (booking cancelled afterwards)
-PASS  G52 Membership - Add a Monthly member  ->  Pop-up: "Priya Nair is now a Monthly member (5% off)."; MySQL: Priya Nair ACTIVE, 5.00% until 2026-12-18
-PASS  G53 Settings - Change Pool price for Men to Rs. 280  ->  MySQL: Pool / Men = Rs. 280.00
-PASS  G54 Settings - Change the price back to Rs. 270  ->  MySQL: Pool / Men = Rs. 270.00
-PASS  G55 Settings - Appearance: Midnight Blue, text size 16, Apply  ->  Pop-up: "Saved: Midnight Blue, text size 16. Close CUE 147 and start it again to see the new look."; saved theme = Midnight Blue, size = 16
-PASS  G56 Settings - Appearance: switch notifications OFF  ->  Top bar: "Notifications (off)"; pop-up: "Notifications are switched off. Turn them on in Settings > Appearance."
-PASS  G57 Settings - Appearance: switch notifications ON again  ->  Top bar: "Notifications (0)"
-PASS  G58 Settings - Club Settings: save the club name and phone  ->  Pop-up: "Club settings saved on this computer."; saved club name = CUE 147 Test Club
-PASS  G59 Billing - View / Print Bill: print the bill to a file  ->  Bill shows "CUE 147 TEST CLUB"; printed to docs/test-results/sample-bill-print.ps (4033 bytes, starts with %!PS)
-PASS  G60 Reports - Daily Report button  ->  Pop-up: "DAILY REPORT Revenue: ₹270.00 Games played: 1 Busiest table: Pool Table 1"
-PASS  G61 Staff - Change My Password with a wrong current password  ->  Pop-up: "The current password is wrong."; owner123 still works
-PASS  G62 Staff - Change My Password (owner123 -> owner456)  ->  Pop-up: "Your password has been changed. Use the new password next time you log in."; owner456 logs in, owner123 refused (then changed back)
-PASS  G63 Right-click menu - Right-click a table card (Pool Table 2)  ->  Menu items: [Start Game, End Game, Cancel Game (started by mistake), Adjust Start Time, View Details]
-PASS  G64 Right-click menu - Right-click > View Details  ->  Pop-up: "Pool Table 2 Type: Pool Status: AVAILABLE Price (Men): ₹270 / hour Price (L..."
-PASS  G65 Right-click menu - Right-click > Start Game (Pool Table 2, Rahul Sharma)  ->  Card shows OCCUPIED; MySQL active sessions = 1
-PASS  G66 Corrections - Right-click > Adjust Start Time (20 minutes earlier)  ->  MySQL start time is 20 minutes ago; card timer shows about 00:20
-PASS  G67 Corrections - Right-click > Cancel Game (started by mistake)  ->  No new bill (2 bills before and after); Pool Table 2 is AVAILABLE again
-PASS  G68 Corrections - Reopen Game after an accidental End Game (bill not paid)  ->  Pop-up: "The game is running again on Pool Table 2. See the Tables screen."; MySQL: bill CUE20261118-0003 CANCELLED, Pool Table 2 ACTIVE again
-PASS  G69 Corrections - End the reopened game and pay  ->  New bill CUE20261118-0004 PAID (CASH); cancelled bills kept in history: 1
-PASS  G70 Auto refresh - Another counter starts a game (directly in MySQL)  ->  Card changed to OCCUPIED by itself after about 2 seconds (auto refresh every 15 seconds)
-PASS  G71 Dashboard - Notifications button  ->  Pop-up: "• No new notifications"
-PASS  G72 Navigation - Menu: Help > About Cue 147  ->  Pop-up: "CUE 147 - Snooker & Pool Club Management..."
-PASS  G73 Navigation - Toolbar button: New Customer  ->  Customers screen is shown
-PASS  G74 Customers - Delete a customer who has bills (Rahul Sharma)  ->  Pop-up: "Rahul Sharma has games, bookings or a membership, so the record is kept (the bills must stay). Nothing was deleted."; Rahul is still in MySQL
-PASS  G75 Logout - Logout button, answer Yes  ->  Login window is shown again
-PASS  G76 Permissions - Login as Staff  ->  Main window opened for staff
-PASS  G77 Permissions - Staff sidebar has no Expenses, Reports or Settings  ->  Sidebar: [Dashboard, Tables, Customers, Bookings, Billing, Membership, Staff] (no Expenses, Reports, Settings); the Reports menu is greyed out
-PASS  G78 Permissions - Staff Tables screen has no Add / Remove / Maintenance  ->  Add, Edit, Remove, Maintenance buttons are not shown
-PASS  G79 Permissions - Staff runs a game and takes UPI payment  ->  MySQL: bill CUE20261118-0006 PAID (UPI); served by Counter Staff, received by Counter Staff
-PASS  G80 Permissions - Staff Customers screen has no Delete button  ->  Delete is not shown for staff; Add is shown
-PASS  G81 Permissions - Staff can change their own password  ->  Change My Password is shown for staff
-PASS  G82 Permissions - Staff Billing screen has no Cancel Bill / Change Method  ->  Cancel Bill and Change Method hidden; Reopen Game shown
-PASS  G83 Logout - Staff logs out  ->  Login window is shown again
-83 passed, 0 failed  (results saved in docs/test-results/gui-click-test-results.tsv)
+PASS  G07 Login - Database settings: Test Connection with the saved settings  ->  Host box shows 127.0.0.1; pop-up: "Connected to 127.0.0.1:3306/cue147_test."
+PASS  G08 Login - Database settings: wrong password, then Cancel  ->  Pop-up: "The database user name or password is wrong."; Cancel closed the window and the app still uses the old settings
+PASS  G09 Login - Login as Owner with the correct password  ->  Main window opened: "CUE 147 - Snooker & Pool Club"
+PASS  G10 Navigation - Sidebar button: Dashboard  ->  Status bar shows "Viewing: Dashboard"
+PASS  G11 Navigation - Sidebar button: Tables  ->  Status bar shows "Viewing: Tables"
+PASS  G12 Navigation - Sidebar button: Customers  ->  Status bar shows "Viewing: Customers"
+PASS  G13 Navigation - Sidebar button: Bookings  ->  Status bar shows "Viewing: Bookings"
+PASS  G14 Navigation - Sidebar button: Billing  ->  Status bar shows "Viewing: Billing"
+PASS  G15 Navigation - Sidebar button: Membership  ->  Status bar shows "Viewing: Membership"
+PASS  G16 Navigation - Sidebar button: Expenses  ->  Status bar shows "Viewing: Expenses"
+PASS  G17 Navigation - Sidebar button: Reports  ->  Status bar shows "Viewing: Reports"
+PASS  G18 Navigation - Sidebar button: Staff  ->  Status bar shows "Viewing: Staff"
+PASS  G19 Navigation - Sidebar button: Settings  ->  Status bar shows "Viewing: Settings"
+PASS  G20 Customers - Add customer with a bad phone number  ->  Pop-up: "Phone number must be exactly 10 digits."; customer count unchanged (2)
+PASS  G21 Customers - Add customer with an empty name  ->  Pop-up: "Name is required."
+PASS  G22 Customers - Add a valid customer (Rahul Sharma, Men)  ->  Pop-up: "Customer Rahul Sharma registered."; found in MySQL and in the table
+PASS  G23 Customers - Add a second customer (Priya Nair, Ladies)  ->  Saved: Priya Nair, gender Ladies
+PASS  G24 Customers - Add customer with a phone number that already exists  ->  Pop-up: "This phone number is already registered."; still only one row in MySQL
+PASS  G25 Customers - Search for 'Rahul'  ->  Table shows 1 row: Rahul Sharma
+PASS  G26 Customers - Show All button  ->  Table shows 4 rows (2 walk-in guests + 2 customers)
+PASS  G27 Customers - History button without selecting a customer  ->  Pop-up: "Select a customer in the table first."
+PASS  G28 Customers - History of a customer  ->  History window opened for Rahul Sharma and was closed
+PASS  G29 Customers - Delete a new customer who never played (owner)  ->  Question: "Delete customer Temp Person? This cannot be undone."; after Yes the customer is gone from MySQL and the table
+PASS  G30 Customers - Delete the walk-in guest row  ->  Pop-up: "The built-in walk-in guest cannot be deleted."
+PASS  G31 Sessions - Start Game on Pool Table 1 for Rahul Sharma  ->  Pop-up: "Game started on Pool Table 1 Player: Rahul Sharma Rate: ₹270 / hour"; MySQL: Pool Table 1 = OCCUPIED, player Rahul Sharma, 1 active session
+PASS  G32 Sessions - Running timer on the table card  ->  Card shows a live timer (Running: 00:00:xx)
+PASS  G33 Sessions - Dashboard shows the active session  ->  Dashboard query: active 1, occupied 1, available 4 of 5
+PASS  G34 Payments - End Game, then pay by Cash  ->  Pop-up: "Payment of ₹270.00 received by CASH."; MySQL: bill CUE20261123-0001 = Rs. 270.00, PAID (CASH), received by Club Owner
+PASS  G35 Sessions - Table is free again after the game  ->  MySQL: Pool Table 1 = AVAILABLE
+PASS  G36 Payments - Second game: Priya (Ladies) pays by UPI  ->  MySQL: bill CUE20261123-0002 = Rs. 220.00, PAID (UPI)
+PASS  G37 Tables - Add Table (Pool Table 9)  ->  MySQL now has Pool Table 9 (6 tables)
+PASS  G38 Tables - Remove Table (Pool Table 9, no history)  ->  Table removed; MySQL has 5 tables again
+PASS  G39 Tables - Maintenance on, then off (Pool Table 3)  ->  Status MAINTENANCE (Start Game disabled), then AVAILABLE again
+PASS  G40 Billing - Bill list shows both bills  ->  Billing table shows 2 bills
+PASS  G41 Billing - Cancel Bill (refund Priya's paid bill)  ->  MySQL: bill CANCELLED, payment REFUNDED, reason kept; revenue 490.00 -> 270.00
+PASS  G42 Billing - Search bills by customer name  ->  Search shows 1 bill; Refresh shows all again
+PASS  G43 Billing - Cancel Bill without selecting a bill  ->  Pop-up: "Select a bill in the table first."
+PASS  G44 Expenses - Add expense with amount 0  ->  Pop-up: "Amount must be more than zero."
+PASS  G45 Expenses - Add expense (Rent, Rs. 1500, Cash)  ->  Pop-up: "Expense saved: RENT ₹1,500.00"; MySQL has 1 expense
+PASS  G46 Expenses - Edit the expense (amount 2000)  ->  MySQL amount = 2000.00
+PASS  G47 Dashboard - Dashboard figures after the sales and the expense  ->  Revenue 270.00, expenses 2000.00, estimated profit -1730.00
+PASS  G48 Expenses - Delete: press Cancel in the question  ->  Question: "Are you sure you want to delete this exp..."; after Cancel MySQL still has 1 expense
+PASS  G49 Expenses - Delete: press Yes in the question  ->  MySQL has 0 expenses; dashboard today's expenses = 0.00
+PASS  G50 Bookings - Book a table (defaults: today 19:00, 1 hour)  ->  Pop-up: "Booking confirmed! C..."; MySQL has 1 booking
+PASS  G51 Bookings - Cancel the booking  ->  MySQL booking status = CANCELLED
+PASS  G52 Bookings - Book 19:00, then try 19:30 on the same table  ->  Pop-up: "Pool Table 1 already has a booking that overlaps 19:30 (1.0 h) on 2026-11-23."; MySQL still has only 1 confirmed booking (then cancelled)
+PASS  G53 Bookings - Priya books Pool Table 1 from now; Rahul tries to play there  ->  Pop-up: "Pool Table 1 is booked for Priya Nair from 15:41 to 16:41. Start the game for Priya Nair, or cancel the booking first."; no game started (booking cancelled afterwards)
+PASS  G54 Membership - Add a Monthly member  ->  Pop-up: "Priya Nair is now a Monthly member (5% off)."; MySQL: Priya Nair ACTIVE, 5.00% until 2026-12-23
+PASS  G55 Settings - Change Pool price for Men to Rs. 280  ->  MySQL: Pool / Men = Rs. 280.00
+PASS  G56 Settings - Change the price back to Rs. 270  ->  MySQL: Pool / Men = Rs. 270.00
+PASS  G57 Settings - Appearance: Midnight Blue, text size 16, Apply  ->  Pop-up: "Saved: Midnight Blue, text size 16. Close CUE 147 and start it again to see the new look."; saved theme = Midnight Blue, size = 16
+PASS  G58 Settings - Appearance: switch notifications OFF  ->  Top bar: "Notifications (off)"; pop-up: "Notifications are switched off. Turn them on in Settings > Appearance."
+PASS  G59 Settings - Appearance: switch notifications ON again  ->  Top bar: "Notifications (0)"
+PASS  G60 Settings - Club Settings: save the club name and phone  ->  Pop-up: "Club settings saved on this computer."; saved club name = CUE 147 Test Club
+PASS  G61 Billing - View / Print Bill: print the bill to a file  ->  Bill shows "CUE 147 TEST CLUB"; printed to docs/test-results/sample-bill-print.ps (4033 bytes, starts with %!PS)
+PASS  G62 Reports - Daily Report button  ->  Pop-up: "DAILY REPORT Revenue: ₹270.00 Games played: 1 Busiest table: Pool Table 1"
+PASS  G63 Staff - Change My Password with a wrong current password  ->  Pop-up: "The current password is wrong."; owner123 still works
+PASS  G64 Staff - Change My Password (owner123 -> owner456)  ->  Pop-up: "Your password has been changed. Use the new password next time you log in."; owner456 logs in, owner123 refused (then changed back)
+PASS  G65 Right-click menu - Right-click a table card (Pool Table 2)  ->  Menu items: [Start Game, End Game, Cancel Game (started by mistake), Adjust Start Time, View Details]
+PASS  G66 Right-click menu - Right-click > View Details  ->  Pop-up: "Pool Table 2 Type: Pool Status: AVAILABLE Price (Men): ₹270 / hour Price (L..."
+PASS  G67 Right-click menu - Right-click > Start Game (Pool Table 2, Rahul Sharma)  ->  Card shows OCCUPIED; MySQL active sessions = 1
+PASS  G68 Corrections - Right-click > Adjust Start Time (20 minutes earlier)  ->  MySQL start time is 20 minutes ago; card timer shows about 00:20
+PASS  G69 Corrections - Right-click > Cancel Game (started by mistake)  ->  No new bill (2 bills before and after); Pool Table 2 is AVAILABLE again
+PASS  G70 Corrections - Reopen Game after an accidental End Game (bill not paid)  ->  Pop-up: "The game is running again on Pool Table 2. See the Tables screen."; MySQL: bill CUE20261123-0003 CANCELLED, Pool Table 2 ACTIVE again
+PASS  G71 Corrections - End the reopened game and pay  ->  New bill CUE20261123-0004 PAID (CASH); cancelled bills kept in history: 1
+PASS  G72 Auto refresh - Another counter starts a game (directly in MySQL)  ->  Card changed to OCCUPIED by itself after about 2 seconds (auto refresh every 15 seconds)
+PASS  G73 Dashboard - Notifications button  ->  Pop-up: "• No new notifications"
+PASS  G74 Navigation - Menu: Help > About Cue 147  ->  Pop-up: "CUE 147 - Snooker & Pool Club Management..."
+PASS  G75 Navigation - Toolbar button: New Customer  ->  Customers screen is shown
+PASS  G76 Customers - Delete a customer who has bills (Rahul Sharma)  ->  Pop-up: "Rahul Sharma has games, bookings or a membership, so the record is kept (the bills must stay). Nothing was deleted."; Rahul is still in MySQL
+PASS  G77 Logout - Logout button, answer Yes  ->  Login window is shown again
+PASS  G78 Permissions - Login as Staff  ->  Main window opened for staff
+PASS  G79 Permissions - Staff sidebar has no Expenses, Reports or Settings  ->  Sidebar: [Dashboard, Tables, Customers, Bookings, Billing, Membership, Staff] (no Expenses, Reports, Settings); the Reports menu is greyed out
+PASS  G80 Permissions - Staff Tables screen has no Add / Remove / Maintenance  ->  Add, Edit, Remove, Maintenance buttons are not shown
+PASS  G81 Permissions - Staff runs a game and takes UPI payment  ->  MySQL: bill CUE20261123-0006 PAID (UPI); served by Counter Staff, received by Counter Staff
+PASS  G82 Permissions - Staff Customers screen has no Delete button  ->  Delete is not shown for staff; Add is shown
+PASS  G83 Permissions - Staff can change their own password  ->  Change My Password is shown for staff
+PASS  G84 Permissions - Staff Billing screen has no Cancel Bill / Change Method  ->  Cancel Bill and Change Method hidden; Reopen Game shown
+PASS  G85 Logout - Staff logs out  ->  Login window is shown again
+85 passed, 0 failed  (results saved in docs/test-results/gui-click-test-results.tsv)
 === Appearance test (a new program reads the saved look) ===
 PASS  The saved look is read back: Midnight Blue, text size 16
 PASS  After start-up the accent colour is Midnight Blue
@@ -307,5 +313,5 @@ PASS  After Reset the normal look is used again (Green Baize, 14)
 5 passed, 0 failed
 === Deployment test (auto-start and backup) ===
 PASS  MySQL was stopped, and ensure-mysql.sh started it again by itself
-PASS  backup-db.sh saved today's backup with all tables (backups/cue147-2026-11-18.sql)
+PASS  backup-db.sh saved today's backup with all tables (backups/cue147-2026-11-23.sql)
 === END (exit code 0) ===

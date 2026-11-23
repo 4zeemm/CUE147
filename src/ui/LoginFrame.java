@@ -6,6 +6,8 @@ import exception.ClubException;
 import util.AppLogger;
 import util.Validator;
 import database.DBConnection;
+import database.SchemaMigrator;
+import exception.BusinessException;
 import java.sql.SQLException;
 
 import javax.swing.*;
@@ -43,15 +45,28 @@ public class LoginFrame extends JFrame {
         }
     }
 
-    /** Checks that MySQL is running and creates the first owner/staff accounts if needed. */
+    /**
+     * Connects to the club database, brings its tables up to date and creates the first owner/staff
+     * accounts if needed. When the database cannot be reached, the user can open the Database settings.
+     */
     private void prepareDatabase() {
-        if (!DBConnection.isDatabaseReachable()) {
-            Theme.error(this, "Cannot connect to the MySQL database.\n\n1. Start MySQL:  ./start-mysql.sh\n2. Create the tables:  ./setup-db.sh");
-            return;
+        while (true) {
+            String problem = DBConnection.testConnection(DBConnection.getConfig());
+            if (problem == null) break;
+            AppLogger.info("No database connection to " + DBConnection.getConfig().describe() + ": " + problem);
+            String[] options = {"Database settings", "Try again", "Close"};
+            int choice = JOptionPane.showOptionDialog(this, "Cannot connect to the club database.\n\n" + problem,
+                    "No database connection", JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE, null, options, options[0]);
+            if (choice == 0) DatabaseSettingsDialog.open(this);
+            else if (choice != 1) return;   // Close: the login window stays; logging in will say what is wrong
         }
         try {
+            SchemaMigrator.migrate();          // adds new tables/columns after an update (keeps all data)
             authService.createDefaultUsers();
+        } catch (BusinessException e) {
+            Theme.error(this, e.getMessage());
         } catch (SQLException e) {
+            AppLogger.error("Database preparation failed", e);
             Theme.error(this, "Database problem:\n" + e.getMessage());
         }
     }
@@ -117,6 +132,15 @@ public class LoginFrame extends JFrame {
         c.insets = new Insets(0, 0, 0, 0);
         form.add(forgot, c);
 
+        JButton database = new JButton("Database settings");
+        database.setBorderPainted(false);
+        database.setContentAreaFilled(false);
+        database.setFocusPainted(false);
+        database.setForeground(Theme.MUTED);
+        database.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        database.addActionListener(e -> { if (DatabaseSettingsDialog.open(this)) prepareDatabase(); });
+        form.add(database, c);
+
         showPasswordBox.addActionListener(e ->
                 passwordField.setEchoChar(showPasswordBox.isSelected() ? (char) 0 : '•'));
         getRootPane().setDefaultButton(loginButton);   // Enter key = Login
@@ -145,7 +169,7 @@ public class LoginFrame extends JFrame {
             Theme.error(this, e.getMessage());   // empty fields (InvalidInputException) or wrong password (BusinessException)
         } catch (SQLException e) {
             AppLogger.error("Login failed because of a database problem", e);
-            Theme.error(this, "Database problem:\n" + e.getMessage());
+            Theme.error(this, DBConnection.explain(e, DBConnection.getConfig()));
         }
     }
 
