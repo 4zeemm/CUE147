@@ -1,9 +1,11 @@
 package ui;
 
 import dao.BookingDAO;
+import dao.MembershipDAO;
 import dao.SessionDAO;
 import model.Booking;
 import model.GameSession;
+import model.Membership;
 import service.DashboardStats;
 import service.ReportService;
 import service.SessionService;
@@ -31,15 +33,21 @@ public class DashboardPanel extends ScreenPanel {
     private final StatCard availableCard = new StatCard("Available Tables", "-", Theme.GREEN);
     private final StatCard occupiedCard = new StatCard("Occupied Tables", "-", Theme.RED);
     private final StatCard maintenanceCard = new StatCard("Under Maintenance", "-", Theme.AMBER);
+    private final StatCard endingCard = new StatCard("Ending Soon", "-", Theme.BLUE);
+    private final StatCard unpaidCard = new StatCard("Unpaid Bills", "-", Theme.AMBER);
 
     private final DefaultListModel<String> sessionModel = new DefaultListModel<>();
     private final JList<String> sessionList = new JList<>(sessionModel);
-    private final DefaultTableModel bookingModel = Theme.tableModel("ID", "Customer", "Table", "Date", "Time");
+    private final DefaultTableModel bookingModel = Theme.tableModel("Customer", "Table", "Date", "Time");
+    private final DefaultTableModel endingModel = Theme.tableModel("Member", "Ends", "Days left");
 
     private final ReportService reportService = new ReportService();
     private final SessionDAO sessionDAO = new SessionDAO();
     private final BookingDAO bookingDAO = new BookingDAO();
+    private final MembershipDAO membershipDAO = new MembershipDAO();
     private final SessionService sessionService = new SessionService();
+    /** A membership is "ending soon" when it has this many days left or fewer. */
+    private static final int ENDING_SOON_DAYS = 14;
     private List<GameSession> activeSessions = new ArrayList<>();
 
     /** Everything the dashboard needs, loaded in one go in the background. */
@@ -47,6 +55,7 @@ public class DashboardPanel extends ScreenPanel {
         DashboardStats stats;
         List<GameSession> sessions;
         List<Booking> bookings;
+        List<Membership> ending;
     }
 
     public DashboardPanel(MainFrame frame) {
@@ -59,17 +68,18 @@ public class DashboardPanel extends ScreenPanel {
 
         JPanel body = Theme.panel(new BorderLayout(0, 14));
         JPanel statRows = Theme.panel(new GridLayout(2, 1, 0, 14));
-        JPanel row1 = Theme.panel(new GridLayout(1, 5, 14, 0));
-        for (StatCard c : new StatCard[]{todayRevenueCard, monthRevenueCard, todayExpenseCard, monthExpenseCard, profitCard}) row1.add(c);
-        JPanel row2 = Theme.panel(new GridLayout(1, 5, 14, 0));
-        for (StatCard c : new StatCard[]{customersCard, activeCard, availableCard, occupiedCard, maintenanceCard}) row2.add(c);
+        JPanel row1 = Theme.panel(new GridLayout(1, 6, 14, 0));
+        for (StatCard c : new StatCard[]{todayRevenueCard, monthRevenueCard, todayExpenseCard, monthExpenseCard, profitCard, unpaidCard}) row1.add(c);
+        JPanel row2 = Theme.panel(new GridLayout(1, 6, 14, 0));
+        for (StatCard c : new StatCard[]{customersCard, activeCard, availableCard, occupiedCard, maintenanceCard, endingCard}) row2.add(c);
         statRows.add(row1);
         statRows.add(row2);
         body.add(statRows, BorderLayout.NORTH);
 
-        JPanel middle = Theme.panel(new GridLayout(1, 2, 16, 0));
+        JPanel middle = Theme.panel(new GridLayout(1, 3, 16, 0));
         middle.add(buildSessionsCard());
         middle.add(buildBookingsCard());
+        middle.add(buildEndingCard());
         body.add(middle, BorderLayout.CENTER);
         add(body, BorderLayout.CENTER);
     }
@@ -112,6 +122,18 @@ public class DashboardPanel extends ScreenPanel {
         return card;
     }
 
+    /** Members whose membership ends within the next two weeks, so the staff can ask them to renew. */
+    private JPanel buildEndingCard() {
+        RoundedPanel card = new RoundedPanel(new BorderLayout(0, 10));
+        card.setBorder(new EmptyBorder(16, 16, 16, 16));
+        card.add(Theme.label("Memberships Ending Soon", Theme.HEADING, Theme.TEXT), BorderLayout.NORTH);
+        JTable t = new JTable(endingModel);
+        Theme.styleTable(t);
+        card.add(Theme.scroll(t), BorderLayout.CENTER);
+        card.add(Theme.label("Next " + ENDING_SOON_DAYS + " days - renew on Membership", Theme.SMALL, Theme.MUTED), BorderLayout.SOUTH);
+        return card;
+    }
+
     /**
      * Loads the numbers with a SwingWorker.
      * Why? Database queries can be slow, and the screen must never freeze.
@@ -127,6 +149,7 @@ public class DashboardPanel extends ScreenPanel {
                 d.stats = reportService.loadDashboardStats();
                 d.sessions = sessionDAO.findActive();
                 d.bookings = bookingDAO.findUpcoming(8);
+                d.ending = membershipDAO.findExpiringSoon(ENDING_SOON_DAYS);
                 return d;
             }
 
@@ -135,7 +158,7 @@ public class DashboardPanel extends ScreenPanel {
                 try {
                     showData(get());
                 } catch (Exception e) {
-                    Theme.error(DashboardPanel.this, "Could not load the dashboard.\nIs MySQL running? (./start-mysql.sh)\n\n"
+                    Theme.error(DashboardPanel.this, "Could not load the dashboard.\nIs the database server switched on?\n\n"
                             + (e.getCause() != null ? e.getCause().getMessage() : e.getMessage()));
                 }
             }
@@ -157,10 +180,19 @@ public class DashboardPanel extends ScreenPanel {
         availableCard.setValue(String.valueOf(s.availableTables));
         occupiedCard.setValue(String.valueOf(s.occupiedTables));
         maintenanceCard.setValue(String.valueOf(s.maintenanceTables));
+        endingCard.setValue(String.valueOf(d.ending.size()));
+        endingCard.setNote("next " + ENDING_SOON_DAYS + " days");
+        unpaidCard.setValue(String.valueOf(s.unpaidBills));
+        unpaidCard.setNote(s.unpaidBills == 0 ? "all bills paid" : "waiting for payment");
+
+        endingModel.setRowCount(0);
+        for (Membership m : d.ending) {
+            endingModel.addRow(new Object[]{m.getCustomerName(), m.getExpiryDate(), m.getDaysLeft()});
+        }
 
         bookingModel.setRowCount(0);
         for (Booking b : d.bookings) {
-            bookingModel.addRow(new Object[]{b.getDisplayId(), b.getCustomerName(), b.getTableName(), b.getDate(), b.getTime()});
+            bookingModel.addRow(new Object[]{b.getCustomerName(), b.getTableName(), b.getDate(), b.getTime()});
         }
         activeSessions = d.sessions;
         tick();

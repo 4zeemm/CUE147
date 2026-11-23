@@ -3,6 +3,15 @@ Java Swing + MySQL desktop app for the club counter. Runs on Windows and macOS (
 
 All computers at the club use **one shared MySQL database** on the club server, so everyone sees the same live data.
 
+## Installing on a club computer
+Download the installer for that computer (GitHub > Actions > Build installers, or the release page):
+- **Windows:** `CUE 147-<version>.msi` - double-click, then start CUE 147 from the Start menu or the desktop shortcut.
+- **Mac:** `CUE 147-<version>.dmg` - open it and drag CUE 147 to Applications.
+
+The installers include their own Java, so nothing else needs to be installed. Only the club **server** needs MySQL
+(see "Setting up the club server"). On first start, open **Database settings** on the login screen and point the
+computer at the server.
+
 ## Build (developers)
 The project uses Maven through the Maven Wrapper, so Maven does not need to be installed.
 
@@ -12,6 +21,14 @@ mvnw.cmd package        # Windows
 java -jar target/cue147-2.0.0-SNAPSHOT.jar
 ```
 The MySQL driver is copied to `target/lib/` next to the jar. Windows and Mac installers come in Phase 5.
+
+Installers (jpackage, bundles a Java runtime):
+```
+./build-installer.sh      # Mac .dmg  -> target/installer/
+build-installer.bat       # Windows .msi (needs WiX v3 from wixtoolset.org)
+```
+GitHub Actions builds both: push a tag like `v2.0.0`, or run "Build installers" by hand; the files appear under
+the workflow run (and on the release page for a tag).
 
 Developer scripts (macOS, local MySQL in `~/cue147-mysql`): `./setup-db.sh` (once), `./run.sh`, `./test.sh`
 (all automatic tests), `./upgrade-db.sh`, `./backup-db.sh`, `./start-mysql.sh`, `./stop-mysql.sh`.
@@ -74,6 +91,14 @@ Never open port 3306 to the internet. For access from outside the club use a rem
    (MySQL Workbench: Server > Data Import > Import from Self-Contained File, target schema `cue147`;
    or `mysql -u root -p cue147 < cue147-DATE.sql`).
 3. Start CUE 147 on the server: it recognises the existing data and only adds what is missing.
+
+## Screens
+The sidebar shows the screens used every day first - Dashboard, Tables, Customers, Bookings, Billing, Membership -
+and then, for the owner only, an **ADMIN** group: Expenses, Reports, Staff and Settings (prices, billing rules,
+appearance, club details, staff list, membership plans, food & drinks menu, backups).
+
+The **dashboard** shows today's and this month's money, unpaid bills, how many tables are free, busy or under
+maintenance, the live games, the next bookings and the memberships ending within 14 days.
 
 ## Project layout
 - `src/` packages: `app` `model` `dao` (all SQL) `service` (business rules) `database` (connection, settings, migrations) `exception` `util` `ui`

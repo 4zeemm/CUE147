@@ -35,6 +35,8 @@ public class MainFrame extends JFrame {
     private final JPanel content = new JPanel(cards);
     private final Map<String, ScreenPanel> screens = new LinkedHashMap<>();
     private final Map<String, RoundButton> navButtons = new LinkedHashMap<>();
+    /** Screens that only the owner uses for setting things up; they sit under "ADMIN" in the sidebar. */
+    private final java.util.Set<String> adminScreens = new java.util.LinkedHashSet<>();
     private final JLabel clockLabel = Theme.label("", Theme.HEADING, Theme.GOLD);
     private final JLabel statusLabel = Theme.label("Ready", Theme.SMALL, Theme.MUTED);
     private final RoundButton notifyButton;
@@ -49,6 +51,7 @@ public class MainFrame extends JFrame {
 
     public MainFrame(User user) {
         super("CUE 147 - Snooker & Pool Club");
+        setIconImages(util.AppInfo.icons());
         this.user = user;
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setSize(1280, 800);
@@ -94,11 +97,17 @@ public class MainFrame extends JFrame {
         screens.put(BILLING, new BillingPanel(this));
         screens.put(MEMBERSHIP, new MembershipPanel(this));
         // screens that only the owner may open
-        if (user.canManageExpenses()) screens.put(EXPENSES, new ExpensesPanel(this));
-        if (user.canViewReports()) screens.put(REPORTS, reports);
-        screens.put(STAFF, new StaffPanel(this));
-        if (user.canManagePricing()) screens.put(SETTINGS, new SettingsPanel(this));
+        if (user.canManageExpenses()) admin(EXPENSES, new ExpensesPanel(this));
+        if (user.canViewReports()) admin(REPORTS, reports);
+        admin(STAFF, new StaffPanel(this));
+        if (user.canManagePricing()) admin(SETTINGS, new SettingsPanel(this));
         for (Map.Entry<String, ScreenPanel> e : screens.entrySet()) content.add(e.getValue(), e.getKey());
+    }
+
+    /** Adds a screen that belongs under the "ADMIN" heading of the sidebar. */
+    private void admin(String name, ScreenPanel panel) {
+        screens.put(name, panel);
+        adminScreens.add(name);
     }
 
     public User getUser() { return user; }
@@ -202,7 +211,9 @@ public class MainFrame extends JFrame {
     }
 
     private void about() {
-        Theme.info(this, "CUE 147 - Snooker & Pool Club Management System\nBreak. Pot. Repeat.\n\nJava Swing + JDBC + MySQL\nAOOP college project.", "About Cue 147");
+        Theme.info(this, "CUE 147 - Snooker & Pool Club Management System\nBreak. Pot. Repeat.\n\nVersion " + util.AppInfo.getVersion()
+                + "\nDatabase: " + database.DBConnection.getConfig().describe()
+                + "\n\nJava Swing + JDBC + MySQL.", "About Cue 147");
     }
 
     // ---------------- Swing Timer ----------------
@@ -239,7 +250,17 @@ public class MainFrame extends JFrame {
         side.add(tag);
         side.add(Box.createVerticalStrut(24));
 
+        // the screens used every day first, then one "ADMIN" group with the setting-up screens
+        boolean adminHeadingAdded = false;
         for (String name : screens.keySet()) {
+            if (adminScreens.contains(name) && !adminHeadingAdded) {
+                adminHeadingAdded = true;
+                side.add(Box.createVerticalStrut(14));
+                JLabel heading = Theme.label("ADMIN", Theme.SMALL, Theme.MUTED);
+                heading.setAlignmentX(Component.LEFT_ALIGNMENT);
+                heading.setBorder(new EmptyBorder(0, 10, 4, 0));
+                side.add(heading);
+            }
             RoundButton b = Theme.button("   " + name, Theme.SIDEBAR, e -> showScreen(name));
             style(b);
             navButtons.put(name, b);

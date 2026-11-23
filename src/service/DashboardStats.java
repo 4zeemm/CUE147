@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 
 /** A bundle of the numbers shown on the dashboard. All values come from SQL queries. */
 public class DashboardStats {
+    public int unpaidBills;
     public BigDecimal todayRevenue = BigDecimal.ZERO;
     public BigDecimal monthRevenue = BigDecimal.ZERO;
     public BigDecimal todayExpenses = BigDecimal.ZERO;

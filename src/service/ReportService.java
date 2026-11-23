@@ -30,6 +30,7 @@ public class ReportService {
         s.todayExpenses = expenseDAO.totalBetween(today, today);
         s.monthExpenses = expenseDAO.totalBetween(monthStart, today);
         s.totalCustomers = customerDAO.countRegistered();
+        s.unpaidBills = billDAO.countUnpaid();
         s.activeSessions = sessionDAO.countActive();
         s.totalTables = tableDAO.countActiveTables();
         s.occupiedTables = s.activeSessions;

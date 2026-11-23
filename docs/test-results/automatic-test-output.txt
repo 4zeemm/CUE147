@@ -277,6 +277,12 @@ Program 1: game started on PS5 Station 1, now closing the program...
 PASS  Program 2: the running game survived the restart (table is OCCUPIED, 1 active session)
 PASS  Program 2: the game can be ended and billed after the restart (120.00)
 === Screen smoke test (opens every screen as owner and staff) ===
+PASS  The app has a version number and a window icon
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by com.formdev.flatlaf.util.NativeLibrary in an unnamed module (file:/Users/azeemmuhammed/CUE147/target/lib/flatlaf-3.5.4.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
 PASS  Owner: all 10 screens open without an error
 PASS  Owner sees Edit, Delete, Export on Expenses
 PASS  Owner sees Maintenance and Remove Table on Tables
@@ -287,8 +293,13 @@ PASS  Staff does NOT get Expenses buttons
 PASS  Staff does NOT get Maintenance / Remove Table
 PASS  Staff does NOT get Cancel Bill / Change Method
 PASS  Staff still gets Reopen Game, Checkout / Pay and Start Game
-10 passed, 0 failed
+11 passed, 0 failed
 === GUI click test (clicks the real buttons of the real screens) ===
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by com.formdev.flatlaf.util.NativeLibrary in an unnamed module (file:/Users/azeemmuhammed/CUE147/target/lib/flatlaf-3.5.4.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
 PASS  G01 Login - Login with empty fields  ->  Pop-up: "Username is required."
 PASS  G02 Login - Login with a wrong password  ->  Pop-up: "Wrong username or password."
 PASS  G03 Login - Wrong role chosen (Staff radio for the owner account)  ->  Pop-up: "This account is a OWNER account. Please choose the correct role."
@@ -338,14 +349,14 @@ PASS  G46 Expenses - Edit the expense (amount 2000)  ->  MySQL amount = 2000.00
 PASS  G47 Dashboard - Dashboard figures after the sales and the expense  ->  Revenue 270.00, expenses 2000.00, estimated profit -1730.00
 PASS  G48 Expenses - Delete: press Cancel in the question  ->  Question: "Are you sure you want to delete this exp..."; after Cancel MySQL still has 1 expense
 PASS  G49 Expenses - Delete: press Yes in the question  ->  MySQL has 0 expenses; dashboard today's expenses = 0.00
-PASS  G50 Expenses - Show deleted + Change History  ->  Deleted list shows 1 expense; history: "Changed 2026-11-23 17:26:32 by Club Owner. Before: RENT Rs. 1500.00 on 2026-11-23 (CASH) November rent"
+PASS  G50 Expenses - Show deleted + Change History  ->  Deleted list shows 1 expense; history: "Changed 2026-11-23 17:49:53 by Club Owner. Before: RENT Rs. 1500.00 on 2026-11-23 (CASH) November rent"
 PASS  G51 Customers - Start Game: a new customer is added from the search box  ->  Phone pre-filled, only the name typed; pop-up: "Game started on Pool Table 2 Player: Kiran Rao Rate: ₹270 / hour"
 PASS  G52 Checkout - End Game: 10% Christmas discount, then Pay Later  ->  Message for 150%: "A percentage discount cannot be more than 100%."; MySQL: UNPAID, subtotal 270, discount 10% (Christmas) = Rs. 27.00, total Rs. 243.00, billed by Counter Staff (remembered)
 PASS  G53 Checkout - Billing > Checkout / Pay: Rs. 100 UPI + the rest in cash  ->  Remaining Rs. 143 after UPI 100, Complete Bill was off until paid; pop-up: "Payment of ₹243.00 received by SPLIT."; MySQL parts: UPI 100 + CASH 143; history shows Billed by Counter Staff
 PASS  G54 Bookings - Book a table (defaults: today 19:00, 1 hour)  ->  Pop-up: "Booking confirmed! C..."; MySQL has 1 booking
 PASS  G55 Bookings - Cancel the booking  ->  MySQL booking status = CANCELLED
 PASS  G56 Bookings - Book 19:00, then try 19:30 on the same table  ->  Pop-up: "Pool Table 1 already has a booking that overlaps 19:30 (1.0 h) on 2026-11-23."; MySQL still has only 1 confirmed booking (then cancelled)
-PASS  G57 Bookings - Priya books Pool Table 1 from now; Rahul tries to play there  ->  Pop-up: "Pool Table 1 is booked for Priya Nair from 17:26 to 18:26. Start the game for Priya Nair, or cancel the booking first."; no game started (booking cancelled afterwards)
+PASS  G57 Bookings - Priya books Pool Table 1 from now; Rahul tries to play there  ->  Pop-up: "Pool Table 1 is booked for Priya Nair from 17:50 to 18:50. Start the game for Priya Nair, or cancel the booking first."; no game started (booking cancelled afterwards)
 PASS  G58 Membership - Sell Membership while the Monthly price is not set  ->  Pop-up: "The price of the Monthly plan is not set yet. The owner sets it in Settings > Membership Plans."
 PASS  G59 Settings - Membership Plans: set the Monthly price to Rs. 500  ->  Pop-up: "Monthly plan: 1 month(s), ₹500, 5% off games. New sales use these values; memberships already sold do not change."
 PASS  G60 Membership - Sell Monthly to Kiran: Rs. 200 UPI + the rest in cash  ->  Dates shown: 23 Nov 2026  to  22 Dec 2026; pop-up: "Kiran Rao: Monthly member until 22 Dec 2026 (5% off) Paid ₹500.00 by SPLIT."; revenue +500
@@ -365,7 +376,7 @@ PASS  G73 Reports - Daily Report button  ->  Pop-up: "DAILY REPORT Revenue: ₹1
 PASS  G74 Reports - Monthly summary for this month  ->  Revenue card ₹1,423; 11 comparison rows; note "vs Oct 2026: new"
 PASS  G75 Reports - Charts tab  ->  2 charts shown
 PASS  G76 Reports - Export CSV  ->  Pop-up: "Saved 43 rows to: /Users/azeemmuhammed/CUE147/docs/test-results/sample-monthly-report.csv"; docs/test-results/sample-monthly-report.csv (1416 bytes)
-PASS  G77 Reports - Export PDF  ->  Pop-up: "The report for Nov 2026 was saved to: /Users/azeemmuhammed/CUE147/docs/test-results/sample-monthly-report.pdf"; docs/test-results/sample-monthly-report.pdf (1677 bytes)
+PASS  G77 Reports - Export PDF  ->  Pop-up: "The report for Nov 2026 was saved to: /Users/azeemmuhammed/CUE147/docs/test-results/sample-monthly-report.pdf"; docs/test-results/sample-monthly-report.pdf (1676 bytes)
 PASS  G78 Billing - Billed-by filter on the Billing screen  ->  4 bills billed by Counter Staff (all rows say so); Ken 0; All staff 4
 PASS  G79 Staff - Change My Password with a wrong current password  ->  Pop-up: "The current password is wrong."; owner123 still works
 PASS  G80 Staff - Change My Password (owner123 -> owner456)  ->  Pop-up: "Your password has been changed. Use the new password next time you log in."; owner456 logs in, owner123 refused (then changed back)
@@ -376,29 +387,36 @@ PASS  G84 Corrections - Right-click > Adjust Start Time (20 minutes earlier)  ->
 PASS  G85 Corrections - Right-click > Cancel Game (started by mistake)  ->  No new bill (4 bills before and after); Pool Table 2 is AVAILABLE again
 PASS  G86 Corrections - Reopen Game after an accidental End Game (bill not paid)  ->  Pop-up: "The game is running again on Pool Table 2. See the Tables screen."; MySQL: bill CUE20261123-0005 CANCELLED, Pool Table 2 ACTIVE again
 PASS  G87 Corrections - End the reopened game and pay  ->  New bill CUE20261123-0006 PAID (CASH); cancelled bills kept in history: 1
-PASS  G88 Auto refresh - Another counter starts a game (directly in MySQL)  ->  Card changed to OCCUPIED by itself after about 11 seconds (auto refresh every 15 seconds)
+PASS  G88 Auto refresh - Another counter starts a game (directly in MySQL)  ->  Card changed to OCCUPIED by itself after about 10 seconds (auto refresh every 15 seconds)
 PASS  G89 Dashboard - Notifications button  ->  Pop-up: "• No new notifications"
 PASS  G90 Navigation - Menu: Help > About Cue 147  ->  Pop-up: "CUE 147 - Snooker & Pool Club Management..."
 PASS  G91 Navigation - Toolbar button: New Customer  ->  Customers screen is shown
 PASS  G92 Customers - Delete a customer who has bills (Rahul Sharma)  ->  Pop-up: "Rahul Sharma has games, bookings or a membership, so the record is kept (the bills must stay). Nothing was deleted."; Rahul is still in MySQL
-PASS  G93 Backups - Settings > Backups: choose a folder, keep 3, Save  ->  Pop-up: "Backup settings saved on this computer."; folder gui-test-backups, keep 3
-PASS  G94 Backups - Backup Now  ->  Pop-up: "Backup saved: /Users/azeemmuhammed/CUE147/target/gui-test-backups/cue147-cue147_test-2026-11-23_17-28-12.sql (22 KB)"; last backup: 23 Nov 2026, 17:28 on Azeems-MacBook-Air.local (manual)
-PASS  G95 Backups - Restore from Backup (choose file, Yes, type RESTORE)  ->  Pop-up: "The data of cue147-cue147_test-2026-11-23_17-28-12.sql is back. CUE 147 now returns to the login screen."; counts before and after: customers=5 bills=7 payments=8 payment_parts=9 order_items=2 memberships=1 expenses=1
-PASS  G96 Backups - Log in again after the restore  ->  Logged in again as owner
-PASS  G97 Logout - Logout button, answer Yes  ->  Login window is shown again
-PASS  G98 Permissions - Login as Staff  ->  Main window opened for staff
-PASS  G99 Permissions - Staff sidebar has no Expenses, Reports or Settings  ->  Sidebar: [Dashboard, Tables, Customers, Bookings, Billing, Membership, Staff] (no Expenses, Reports, Settings); the Reports menu is greyed out
-PASS  G100 Permissions - Staff Tables screen has no Add / Remove / Maintenance  ->  Add, Edit, Remove, Maintenance buttons are not shown
-PASS  G101 Permissions - Staff runs a game and takes UPI payment  ->  MySQL: bill CUE20261123-0008 PAID (UPI); served by Counter Staff, received by Counter Staff
-PASS  G102 Permissions - Staff Customers screen has no Delete button  ->  Delete is not shown for staff; Add is shown
-PASS  G103 Permissions - Staff can change their own password  ->  Change My Password is shown for staff
-PASS  G104 Permissions - Staff Billing screen has no Cancel Bill / Change Method  ->  Cancel Bill and Change Method hidden; Reopen Game shown
-PASS  G105 Logout - Staff logs out  ->  Login window is shown again
-105 passed, 0 failed  (results saved in docs/test-results/gui-click-test-results.tsv)
+PASS  G93 Navigation - Sidebar: daily screens first, setting-up screens under ADMIN  ->  Sidebar: [Dashboard, Tables, Customers, Bookings, Billing, Membership, Expenses, Reports, Staff, Settings] with ADMIN before Expenses
+PASS  G94 Dashboard - Memberships Ending Soon card and list  ->  Card and list show 0 membership(s) ending within 14 days
+PASS  G95 Backups - Settings > Backups: choose a folder, keep 3, Save  ->  Pop-up: "Backup settings saved on this computer."; folder gui-test-backups, keep 3
+PASS  G96 Backups - Backup Now  ->  Pop-up: "Backup saved: /Users/azeemmuhammed/CUE147/target/gui-test-backups/cue147-cue147_test-2026-11-23_17-51-36.sql (22 KB)"; last backup: 23 Nov 2026, 17:51 on Azeems-MacBook-Air.local (manual)
+PASS  G97 Backups - Restore from Backup (choose file, Yes, type RESTORE)  ->  Pop-up: "The data of cue147-cue147_test-2026-11-23_17-51-36.sql is back. CUE 147 now returns to the login screen."; counts before and after: customers=5 bills=7 payments=8 payment_parts=9 order_items=2 memberships=1 expenses=1
+PASS  G98 Backups - Log in again after the restore  ->  Logged in again as owner
+PASS  G99 Logout - Logout button, answer Yes  ->  Login window is shown again
+PASS  G100 Permissions - Login as Staff  ->  Main window opened for staff
+PASS  G101 Permissions - Staff sidebar has no Expenses, Reports or Settings  ->  Sidebar: [Dashboard, Tables, Customers, Bookings, Billing, Membership, Staff] (no Expenses, Reports, Settings); the Reports menu is greyed out
+PASS  G102 Permissions - Staff Tables screen has no Add / Remove / Maintenance  ->  Add, Edit, Remove, Maintenance buttons are not shown
+PASS  G103 Permissions - Staff runs a game and takes UPI payment  ->  MySQL: bill CUE20261123-0008 PAID (UPI); served by Counter Staff, received by Counter Staff
+PASS  G104 Permissions - Staff Customers screen has no Delete button  ->  Delete is not shown for staff; Add is shown
+PASS  G105 Permissions - Staff can change their own password  ->  Change My Password is shown for staff
+PASS  G106 Permissions - Staff Billing screen has no Cancel Bill / Change Method  ->  Cancel Bill and Change Method hidden; Reopen Game shown
+PASS  G107 Logout - Staff logs out  ->  Login window is shown again
+107 passed, 0 failed  (results saved in docs/test-results/gui-click-test-results.tsv)
 === Appearance test (a new program reads the saved look) ===
 PASS  The saved look is read back: Midnight Blue, text size 16
 PASS  After start-up the accent colour is Midnight Blue
 PASS  After start-up the text is bigger (body 16, title 30)
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by com.formdev.flatlaf.util.NativeLibrary in an unnamed module (file:/Users/azeemmuhammed/CUE147/target/lib/flatlaf-3.5.4.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
 PASS  The main window opens with the new look (screenshot 15-appearance-midnight-blue.png)
 PASS  After Reset the normal look is used again (Green Baize, 14)
 5 passed, 0 failed

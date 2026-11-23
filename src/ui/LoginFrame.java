@@ -29,6 +29,7 @@ public class LoginFrame extends JFrame {
 
     public LoginFrame() {
         super("CUE 147 - Login");
+        setIconImages(util.AppInfo.icons());
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setSize(900, 580);
         setLocationRelativeTo(null);
@@ -132,6 +133,7 @@ public class LoginFrame extends JFrame {
         forgot.addActionListener(e -> forgotPassword());
         c.insets = new Insets(0, 0, 0, 0);
         form.add(forgot, c);
+        form.add(Theme.label("Version " + util.AppInfo.getVersion(), Theme.SMALL, Theme.MUTED), c);
 
         JButton database = new JButton("Database settings");
         database.setBorderPainted(false);

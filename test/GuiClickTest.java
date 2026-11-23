@@ -1390,6 +1390,26 @@ public class GuiClickTest {
             return "Pop-up: \"" + text + "\"; Rahul is still in MySQL";
         });
 
+        test("Navigation", "Sidebar: daily screens first, setting-up screens under ADMIN", "ADMIN label sits above Expenses / Reports / Staff / Settings", () -> {
+            MainFrame open = mainFrame();   // the window that is on the screen now (a new one after the restore test)
+            List<String> sidebar = onEdt(() -> { List<String> names = new ArrayList<>(); for (RoundButton rb : all(open, RoundButton.class, true)) names.add(rb.getText().trim()); return names; });
+            check(sidebar.indexOf("Dashboard") == 0 && sidebar.indexOf("Membership") == 5, "daily screens: " + sidebar);
+            check(sidebar.indexOf("Expenses") == 6 && sidebar.indexOf("Settings") == 9, "admin screens: " + sidebar);
+            check(hasLabel(open, "ADMIN"), "no ADMIN heading");
+            return "Sidebar: " + sidebar.subList(0, 10) + " with ADMIN before Expenses";
+        });
+        test("Dashboard", "Memberships Ending Soon card and list", "Shows the members whose membership ends within 14 days", () -> {
+            goTo("Dashboard");
+            sleep(1200);
+            DashboardPanel dp = panel(DashboardPanel.class);
+            int expected = new MembershipDAO().findExpiringSoon(14).size();
+            check(hasLabel(dp, "Memberships Ending Soon"), "card missing");
+            check(hasLabel(dp, "next 14 days"), "note missing");
+            JTable ending = all(dp, JTable.class, true).get(1);
+            int rows = onEdt(ending::getRowCount);
+            check(rows == expected, "list shows " + rows + ", MySQL says " + expected);
+            return "Card and list show " + rows + " membership(s) ending within 14 days";
+        });
         // ================= BACKUPS =================
         File guiBackups = new File("target/gui-test-backups").getAbsoluteFile();
         if (guiBackups.isDirectory()) for (File old : guiBackups.listFiles()) old.delete();

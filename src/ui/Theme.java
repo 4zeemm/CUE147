@@ -2,8 +2,6 @@ package ui;
 
 import javax.swing.*;
 import javax.swing.border.*;
-import javax.swing.plaf.metal.DefaultMetalTheme;
-import javax.swing.plaf.metal.MetalLookAndFeel;
 import javax.swing.table.*;
 import java.awt.*;
 import java.text.SimpleDateFormat;
@@ -56,69 +54,110 @@ public class Theme {
         SMALL = new Font("SansSerif", Font.PLAIN, (int) Math.round(12 * scale));
     }
 
-    /** Call once at start-up: flat Metal look and dark colours for every Swing component. */
-    @SuppressWarnings("deprecation")
+    /**
+     * Call once at start-up: the modern FlatLaf look with the club's own dark green colours.
+     * Every colour, font and rounding is set HERE, so all screens look the same.
+     */
     public static void install() {
         loadAppearance();
         try {
-            MetalLookAndFeel.setCurrentTheme(new DefaultMetalTheme());
-            UIManager.setLookAndFeel(new MetalLookAndFeel());
+            com.formdev.flatlaf.FlatDarkLaf.setup();
         } catch (Exception e) {
             System.out.println("Could not set look and feel: " + e);
         }
-        UIManager.put("Button.gradient", null);
-        for (String k : new String[]{"Panel", "OptionPane", "CheckBox", "RadioButton", "Label", "TabbedPane",
-                "ToolBar", "MenuBar", "Menu", "MenuItem", "PopupMenu", "ToggleButton", "Slider", "ScrollPane",
-                "Viewport", "SplitPane", "Spinner", "ToolTip", "ProgressBar", "Button", "ComboBox",
-                "List", "Table", "TableHeader", "TextArea", "TextField", "PasswordField", "FormattedTextField"}) {
-            UIManager.put(k + ".background", k.equals("MenuBar") || k.equals("PopupMenu") || k.equals("Menu") || k.equals("MenuItem") ? SIDEBAR : PANEL);
-            UIManager.put(k + ".foreground", TEXT);
-        }
-        UIManager.put("OptionPane.messageForeground", TEXT);
-        UIManager.put("OptionPane.background", PANEL);
-        UIManager.put("Panel.background", BG);
+        UIManager.put("defaultFont", BODY);                       // one font for every component (Text size setting)
+
+        // ---- club colours ----
+        put("@background", PANEL);
+        put("@foreground", TEXT);
+        put("@accentColor", ACCENT);
+        put("@selectionBackground", ACCENT);
+        put("Panel.background", BG);
+        put("OptionPane.background", PANEL);
+        put("OptionPane.messageForeground", TEXT);
+        put("RootPane.background", BG);
+        put("Component.borderColor", BORDER);
+        put("Component.disabledBorderColor", BORDER);
+        put("Component.focusColor", ACCENT);
+        put("Component.focusedBorderColor", ACCENT);
+        put("Component.linkColor", BLUE);
+        put("Separator.foreground", BORDER);
+
+        // ---- things the user types in ----
         for (String k : new String[]{"TextField", "PasswordField", "FormattedTextField", "TextArea", "ComboBox", "Spinner", "List"}) {
-            UIManager.put(k + ".background", FIELD);
-            UIManager.put(k + ".caretForeground", TEXT);
-            UIManager.put(k + ".selectionBackground", GREEN);
-            UIManager.put(k + ".selectionForeground", Color.WHITE);
+            put(k + ".background", FIELD);
+            put(k + ".foreground", TEXT);
+            put(k + ".selectionBackground", ACCENT);
+            put(k + ".selectionForeground", Color.WHITE);
         }
-        UIManager.put("ComboBox.buttonBackground", PANEL);
-        UIManager.put("ComboBox.buttonDarkShadow", BORDER);
-        UIManager.put("ComboBox.buttonHighlight", BORDER);
-        UIManager.put("ComboBox.buttonShadow", BORDER);
-        UIManager.put("Button.background", CARD);
-        UIManager.put("Menu.selectionBackground", GREEN);
-        UIManager.put("MenuItem.selectionBackground", GREEN);
-        UIManager.put("MenuItem.selectionForeground", Color.WHITE);
-        UIManager.put("Menu.selectionForeground", Color.WHITE);
-        UIManager.put("TabbedPane.selected", CARD);
-        UIManager.put("TabbedPane.contentAreaColor", CARD);
-        UIManager.put("TabbedPane.light", BORDER);
-        UIManager.put("TabbedPane.highlight", BORDER);
-        UIManager.put("TabbedPane.shadow", BORDER);
-        UIManager.put("TabbedPane.darkShadow", BORDER);
-        UIManager.put("TabbedPane.focus", GREEN);
-        UIManager.put("ProgressBar.foreground", ACCENT);
-        UIManager.put("ProgressBar.background", FIELD);
-        UIManager.put("ProgressBar.selectionForeground", Color.WHITE);
-        UIManager.put("ProgressBar.selectionBackground", Color.WHITE);
-        UIManager.put("Slider.thumb", GREEN);
-        UIManager.put("ToolTip.background", CARD);
-        UIManager.put("Separator.foreground", BORDER);
-        UIManager.put("Separator.background", BG);
-        UIManager.put("ToggleButton.select", GREEN);
-        UIManager.put("OptionPane.buttonFont", BOLD);
-        UIManager.put("ScrollBar.thumb", new Color(0x3A5045));
-        UIManager.put("ScrollBar.thumbHighlight", new Color(0x3A5045));
-        UIManager.put("ScrollBar.thumbShadow", new Color(0x3A5045));
-        UIManager.put("ScrollBar.thumbDarkShadow", new Color(0x3A5045));
-        UIManager.put("ScrollBar.track", FIELD);
-        UIManager.put("ScrollBar.trackHighlight", FIELD);
-        UIManager.put("ScrollBar.background", FIELD);
-        UIManager.put("ScrollBar.foreground", new Color(0x3A5045));
-        UIManager.put("Spinner.arrowButtonBackground", PANEL);
+        put("ComboBox.buttonBackground", FIELD);
+        put("ComboBox.buttonArrowColor", MUTED);
+        put("ComboBox.buttonHoverArrowColor", TEXT);
+        put("ComboBox.popupBackground", CARD);
+        put("Spinner.buttonBackground", FIELD);
+        put("Spinner.buttonArrowColor", MUTED);
+        put("TextComponent.selectionInsets", new Insets(0, 0, 0, 0));
+
+        // ---- buttons, tabs, menus ----
+        put("Button.background", CARD);
+        put("Button.foreground", TEXT);
+        put("Button.hoverBackground", NEUTRAL);
+        put("Button.default.background", ACCENT);
+        put("Button.default.foreground", Color.WHITE);
+        put("ToggleButton.selectedBackground", ACCENT);
+        put("MenuBar.background", SIDEBAR);
+        put("MenuItem.background", SIDEBAR);
+        put("PopupMenu.background", CARD);
+        put("Menu.selectionBackground", ACCENT);
+        put("MenuItem.selectionBackground", ACCENT);
+        put("MenuItem.selectionForeground", Color.WHITE);
+        put("TabbedPane.background", BG);
+        put("TabbedPane.contentAreaColor", CARD);
+        put("TabbedPane.underlineColor", ACCENT);
+        put("TabbedPane.selectedBackground", CARD);
+        put("TabbedPane.hoverColor", NEUTRAL);
+        put("TabbedPane.focusColor", NEUTRAL);
+
+        // ---- lists, tables, bars ----
+        put("Table.background", PANEL);
+        put("Table.gridColor", BORDER);
+        put("Table.selectionBackground", ACCENT.darker());
+        put("Table.selectionForeground", Color.WHITE);
+        put("TableHeader.background", CARD);
+        put("TableHeader.foreground", GOLD);
+        put("TableHeader.separatorColor", BORDER);
+        put("ProgressBar.background", FIELD);
+        put("ProgressBar.foreground", ACCENT);
+        put("Slider.trackColor", FIELD);
+        put("Slider.thumbColor", ACCENT);
+        put("ScrollBar.track", FIELD);
+        put("ScrollBar.thumb", NEUTRAL);
+        put("ScrollBar.hoverThumbColor", ACCENT);
+        put("ScrollPane.background", BG);
+        put("Viewport.background", PANEL);
+        put("ToolTip.background", CARD);
+        put("ToolTip.foreground", TEXT);
+        put("CheckBox.background", BG);
+        put("RadioButton.background", BG);
+        put("Label.foreground", TEXT);
+
+        // ---- rounded corners and spacing (the same everywhere) ----
+        put("Component.arc", 10);
+        put("Button.arc", 10);
+        put("CheckBox.arc", 6);
+        put("TextComponent.arc", 8);
+        put("ProgressBar.arc", 8);
+        put("ScrollBar.thumbArc", 8);
+        put("ScrollBar.width", 12);
+        put("ScrollBar.trackInsets", new Insets(2, 2, 2, 2));
+        put("ScrollBar.thumbInsets", new Insets(2, 2, 2, 2));
+        put("Component.innerFocusWidth", 1);
+        put("TabbedPane.tabHeight", 34);
+        put("Table.rowHeight", 30);
+        put("OptionPane.buttonMinimumWidth", 90);
     }
+
+    private static void put(String key, Object value) { UIManager.put(key, value); }
 
     // ---------------- small factory methods ----------------
 

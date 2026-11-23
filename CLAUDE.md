@@ -124,7 +124,17 @@ Phase 5: UI polish (FlatLaf, dashboard), installers and GitHub Actions.
   search-or-add picker with membership, one-screen checkout, discounts, split payments, Billed by). Phase 3 done
   (membership plans + Sell Membership with split payment; food & drinks menu, orders during a game, F&B on the bill).
   Phase 4 done (expense history + soft delete, monthly reports with comparison, charts, CSV/PDF export,
-  Billed-by filter, Java backups: daily automatic, Backup now, Restore). Next: Phase 5.
+  Billed-by filter, Java backups: daily automatic, Backup now, Restore). Phase 5 done (FlatLaf look, ADMIN
+  group in the sidebar, dashboard with memberships ending soon, app icon + version, jpackage installers for
+  Windows and Mac, GitHub Actions). All five phases are complete.
+- Look and feel: `ui.Theme.install()` sets up FlatLaf (FlatDarkLaf) and then every club colour, font and rounding
+  in one place. Custom painted parts stay: `RoundButton`, `RoundedPanel`, `StatCard`, `BarChart`.
+- Sidebar: daily screens first, then an "ADMIN" heading with the owner-only screens (`MainFrame.adminScreens`).
+- Icons: `resources/icons/icon-*.png` (window), `packaging/cue147.icns` (Mac), `packaging/cue147.ico` (Windows).
+  Version comes from pom.xml through `resources/app.properties` and `util.AppInfo`.
+- Installers: `./build-installer.sh` (Mac .dmg) and `build-installer.bat` (Windows .msi, needs WiX v3);
+  both use jpackage, which bundles a Java runtime, so club computers do not need Java installed.
+  `.github/workflows/installers.yml` builds both on a version tag; `tests.yml` runs the JUnit tests on every push.
 - Reports: SQL in `dao.ReportDAO`, numbers in `model.MonthlyReport`. Money counts on the day it was RECEIVED
   (payments PAID, bills + memberships). Revenue = table time + food - bill discounts + memberships (tested).
 - Old records are never overwritten: expenses are edited with their old values copied to `expense_changes`;

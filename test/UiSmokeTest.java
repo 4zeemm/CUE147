@@ -51,6 +51,7 @@ public class UiSmokeTest {
         SwingUtilities.invokeAndWait(Theme::install);
         String[] ownerScreens = {"Dashboard", "Tables", "Customers", "Bookings", "Billing", "Membership", "Expenses", "Reports", "Staff", "Settings"};
         String[] staffScreens = {"Dashboard", "Tables", "Customers", "Bookings", "Billing", "Membership", "Staff"};
+        check("The app has a version number and a window icon", !util.AppInfo.getVersion().isEmpty() && util.AppInfo.icons().size() == 7);
 
         Set<String> owner = openAllScreens("owner", "owner123", ownerScreens);
         check("Owner: all 10 screens open without an error", true);

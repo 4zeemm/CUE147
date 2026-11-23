@@ -162,6 +162,20 @@ public class MembershipDAO {
         }
     }
 
+    /** Active members whose membership ends within the next few days, the soonest first. */
+    public List<Membership> findExpiringSoon(int days) throws SQLException {
+        List<Membership> list = new ArrayList<>();
+        try (Connection con = DBConnection.getConnection();
+             PreparedStatement ps = con.prepareStatement(SELECT_MEMBER + "WHERE m.status = 'ACTIVE' "
+                     + "AND m.expiry_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL ? DAY) ORDER BY m.expiry_date")) {
+            ps.setInt(1, days);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) list.add(readMembership(rs));
+            }
+        }
+        return list;
+    }
+
     /** Number of active members whose membership ends within the next few days. */
     public int countExpiringSoon(int days) throws SQLException {
         String sql = "SELECT COUNT(*) FROM memberships WHERE status = 'ACTIVE' AND expiry_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL ? DAY)";
